@@ -335,11 +335,13 @@ def _agent_spawns_per_cell() -> dict[str, dict[str, Any]]:
 
 
 def fig_r3_critic_spawn(rows: list[dict[str, Any]], out_path: Path) -> None:
-    """Bar chart of (fraction of cells with critic spawned) per condition.
-    BARE has no critic instruction and no MCP → 0 by construction.
+    """Critic-sub-agent spawn rate per condition (share of cells with at
+    least one spawn). Same visual idiom as Figures 5 and 6: vertical
+    bars, condition colours, Wilson 95% CIs as whiskers, value labels
+    above the CI caps. BARE has no critic instruction and no MCP → 0
+    by construction; its CI is therefore degenerate at zero.
     """
     spawns = _agent_spawns_per_cell()
-    # Aggregate per condition: count cells (interactive only — BARE was sandboxed)
     by_cond_cells: dict[str, list[bool]] = defaultdict(list)
     for r in rows:
         cell_id = f"{r['task_id']}_{r['condition']}_seed{r['seed']}"
@@ -351,30 +353,48 @@ def fig_r3_critic_spawn(rows: list[dict[str, Any]], out_path: Path) -> None:
                 bool(spawn and spawn["agent_spawns"] > 0)
             )
 
-    fig, ax = plt.subplots(figsize=(6.2, 4.0))
-    x = np.arange(len(COND_ORDER))
-    fracs = []
-    totals = []
-    for cond in COND_ORDER:
-        cs = by_cond_cells.get(cond, [])
+    # Same narrative order as Figures 5 and 6
+    NARR_ORDER = ["BARE", "MCP_NO_PITFALL_DB", "MCP_NO_CRITIC", "MCP_FULL"]
+    counts = []
+    for c in NARR_ORDER:
+        cs = by_cond_cells.get(c, [])
         n = len(cs)
         k = sum(cs)
-        fracs.append(k / max(n, 1))
-        totals.append((k, n))
-    bars = ax.bar(x, [100*f for f in fracs],
-                  color=[COND_COLOR[c] for c in COND_ORDER],
-                  edgecolor="black", linewidth=0.4)
-    for i, (k, n) in enumerate(totals):
-        ax.text(i, 100*fracs[i] + 2, f"{k}/{n}\n({100*fracs[i]:.0f}%)",
-                ha="center", va="bottom", fontsize=9, fontweight="bold")
+        p = k / max(n, 1)
+        lo, hi = _wilson(k, n)
+        counts.append((c, k, n, p, lo, hi))
+
+    fig, ax = plt.subplots(figsize=(6.4, 3.6))
+    x = np.arange(len(NARR_ORDER))
+    rates = np.array([c[3] for c in counts])
+    lo_arr = rates - np.array([c[4] for c in counts])
+    hi_arr = np.array([c[5] for c in counts]) - rates
+
+    ax.bar(x, rates, width=0.62,
+           color=[COND_COLOR[c[0]] for c in counts],
+           edgecolor="white", linewidth=1.0, zorder=2)
+    ax.errorbar(x, rates, yerr=[lo_arr, hi_arr],
+                fmt="none", ecolor="#222222",
+                capsize=5, capthick=1.2, lw=1.2, zorder=3)
+
+    for i, c in enumerate(counts):
+        ax.text(i, c[5] + 0.025,
+                f"{c[3]*100:.1f}%\n({c[1]}/{c[2]})",
+                ha="center", va="bottom",
+                fontsize=9, color="#222222")
+
     ax.set_xticks(x)
-    ax.set_xticklabels([COND_LABEL_TWO_LINE[c] for c in COND_ORDER], fontsize=9)
-    ax.tick_params(axis="x", length=0)
-    ax.set_ylabel("reviewer spawn rate (% of cells)")
-    ax.set_ylim(0, 105)
-    ax.set_title("Reviewer invocation rate by condition", fontsize=10)
-    ax.axhline(0, color="black", lw=0.6)
-    ax.grid(True, axis="y", alpha=0.3)
+    ax.set_xticklabels([COND_LABEL_TWO_LINE[c[0]] for c in counts], fontsize=9)
+    ax.tick_params(axis="x", length=0, pad=4)
+    ax.set_ylabel("critic-sub-agent spawn rate", fontsize=10)
+    ax.set_ylim(0, 1.18)
+    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=9)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    ax.grid(axis="y", alpha=0.25, linestyle=":", zorder=0)
+    ax.set_axisbelow(True)
+
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
