@@ -46,7 +46,7 @@ TIER_OF = {
     **{f"D{i}": "D" for i in range(1, 3)},
 }
 TASK_ORDER = sorted(TIER_OF, key=lambda t: (t[0], int(t[1:])))
-COND_ORDER = ["BARE", "MCP_FULL", "MCP_NO_PITFALL_DB", "MCP_NO_CRITIC"]
+COND_ORDER = ["BARE", "MCP_NO_PITFALL_DB", "MCP_NO_CRITIC", "MCP_FULL"]
 COND_LABEL_TWO_LINE = {
     "BARE":              "BARE\n(no MCP)",
     "MCP_FULL":          "MCP\n(full)",
