@@ -525,8 +525,11 @@ def fig_r4_deltas_only(rows: list[dict[str, Any]], out_path: Path) -> None:
 def fig_r5_pass_at_k(rows: list[dict[str, Any]], out_path: Path) -> None:
     """Reliability metric: fraction of tasks passing >= k of 3 seeds, per condition.
 
-    Grouped bar chart. x-axis groups by k in {1, 2, 3}; within each group, one bar
-    per condition with the value labelled on top.
+    Three side-by-side panels (k=1, k=2, k=3), each a vertical bar
+    chart in the same style as Figure 5 (four conditions, condition
+    colours, value label above each bar). Shared y-axis so panels are
+    directly comparable; the k=3 panel carries the headline reliability
+    gap between MCP-Full and the rest.
     """
     by_ct: dict[tuple[str, str], list[bool]] = defaultdict(list)
     for r in rows:
@@ -545,43 +548,64 @@ def fig_r5_pass_at_k(rows: list[dict[str, Any]], out_path: Path) -> None:
             for kk in ks
         ]
 
-    n_cond = len(rho_by_cond)
-    bar_w = 0.78 / n_cond
-    fig, ax = plt.subplots(figsize=(6.4, 3.6))
-    x_centres = np.arange(len(ks))
-    for i, cond in enumerate(rho_by_cond):
-        offs = (i - (n_cond - 1) / 2) * bar_w
-        bars = ax.bar(
-            x_centres + offs, rho_by_cond[cond], width=bar_w,
-            color=COND_COLOR[cond], edgecolor="white",
-            label=COND_LABEL[cond], linewidth=0.6,
-        )
-        for b, v in zip(bars, rho_by_cond[cond]):
-            ax.text(
-                b.get_x() + b.get_width() / 2, v + 0.015,
-                f"{v:.2f}", ha="center", va="bottom",
-                fontsize=8, color=COND_COLOR[cond], fontweight="bold",
-            )
+    # Match COND_ORDER for left-to-right placement; use the same NARR_ORDER
+    # as Figure 5 (BARE -> NoPitDB -> NoCritic -> Full) so the reader sees
+    # the same progression in both figures.
+    NARR_ORDER = ["BARE", "MCP_NO_PITFALL_DB", "MCP_NO_CRITIC", "MCP_FULL"]
+    NARR_ORDER = [c for c in NARR_ORDER if c in rho_by_cond]
 
-    ax.set_xticks(x_centres)
-    ax.set_xticklabels(
-        [r"$k\!=\!1$ (any seed)",
-         r"$k\!=\!2$ (majority)",
-         r"$k\!=\!3$ (all seeds)"],
-        fontsize=9,
-    )
-    ax.set_xlabel("passes required out of 3 seeds", fontsize=10)
-    ax.set_ylabel(f"share of tasks ({n_tasks} total)", fontsize=10)
-    ax.set_ylim(0.0, 1.05)
-    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
-    ax.grid(axis="y", linestyle=":", alpha=0.4, zorder=0)
-    ax.set_axisbelow(True)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
-              fontsize=9, frameon=False, ncol=1)
+    # Wider, more compact labels: short condition tag on top, the
+    # qualifier in parentheses on a second line at small size.
+    SHORT_LABEL = {
+        "BARE":              "BARE",
+        "MCP_NO_PITFALL_DB": "MCP\n−PitDB",
+        "MCP_NO_CRITIC":     "MCP\n−Critic",
+        "MCP_FULL":          "MCP\nFull",
+    }
+    fig, axes = plt.subplots(1, 3, figsize=(10.8, 3.8),
+                             sharey=True, gridspec_kw={"wspace": 0.18})
+    k_titles = [r"$k = 1$ (any seed)",
+                r"$k = 2$ (majority)",
+                r"$k = 3$ (all seeds)"]
 
-    fig.tight_layout()
+    # Wilson 95% CIs on k_pass / n_tasks per (condition, k)
+    def _ci(cond: str, ki: int) -> tuple[float, float]:
+        rho = rho_by_cond[cond][ki]
+        k = int(round(rho * n_tasks))
+        return _wilson(k, n_tasks)
+
+    for ki, ax in enumerate(axes):
+        vals = np.array([rho_by_cond[c][ki] for c in NARR_ORDER])
+        cis  = [_ci(c, ki) for c in NARR_ORDER]
+        lo_arr = vals - np.array([c[0] for c in cis])
+        hi_arr = np.array([c[1] for c in cis]) - vals
+        x = np.arange(len(NARR_ORDER))
+        ax.bar(x, vals, width=0.58,
+               color=[COND_COLOR[c] for c in NARR_ORDER],
+               edgecolor="white", linewidth=1.0, zorder=2)
+        ax.errorbar(x, vals, yerr=[lo_arr, hi_arr],
+                    fmt="none", ecolor="#222222",
+                    capsize=4, capthick=1.0, lw=1.0, zorder=3)
+        for xi, v, (lo, hi) in zip(x, vals, cis):
+            ax.text(xi, hi + 0.018, f"{v:.2f}",
+                    ha="center", va="bottom",
+                    fontsize=9, color="#222222")
+        ax.set_xticks(x)
+        ax.set_xticklabels([SHORT_LABEL[c] for c in NARR_ORDER],
+                           fontsize=8.5)
+        ax.tick_params(axis="x", length=0, pad=4)
+        ax.set_title(k_titles[ki], fontsize=10.5, pad=6)
+        for s in ("top", "right"):
+            ax.spines[s].set_visible(False)
+        ax.grid(axis="y", linestyle=":", alpha=0.35, zorder=0)
+        ax.set_axisbelow(True)
+        ax.set_xlim(-0.7, len(NARR_ORDER) - 0.3)
+
+    axes[0].set_ylabel(f"share of {n_tasks} tasks", fontsize=10)
+    axes[0].set_ylim(0.0, 1.12)
+    axes[0].set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    axes[0].set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=9)
+
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     fig.savefig(out_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
