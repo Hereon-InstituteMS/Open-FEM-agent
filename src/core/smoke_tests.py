@@ -173,7 +173,7 @@ def smoke_fourc() -> SmokeResult:
     t0 = time.time()
     binary = os.environ.get("FOURC_BINARY", "")
     if not binary:
-        for p in ["/home/alexander/4C/build/4C", "/opt/4C/build/4C"]:
+        for p in [os.path.expanduser("~/4C/build/4C"), "/opt/4C/build/4C"]:
             if Path(p).exists():
                 binary = p; break
     if not binary or not Path(binary).exists():

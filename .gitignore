@@ -41,3 +41,11 @@ Thumbs.db
 *.hdf5
 *.e
 *.exo
+
+# Secrets — never commit
+.env
+*.env
+papers/.env
+
+# Local quarantine directories (work-in-progress, not for release)
+.quarantine_*

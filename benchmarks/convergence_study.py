@@ -18,8 +18,8 @@ import pyvista as pv
 pv.OFF_SCREEN = True
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-os.environ.setdefault("FOURC_ROOT", "/home/alexander/4C")
-os.environ.setdefault("FOURC_BINARY", "/home/alexander/4C/build/4C")
+os.environ.setdefault("FOURC_ROOT", os.path.expanduser("~/4C"))
+os.environ.setdefault("FOURC_BINARY", os.path.expanduser("~/4C/build/4C"))
 ld = os.environ.get("LD_LIBRARY_PATH", "")
 if "/opt/4C-dependencies/lib" not in ld:
     os.environ["LD_LIBRARY_PATH"] = f"/opt/4C-dependencies/lib:{ld}"

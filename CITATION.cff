@@ -1,12 +1,11 @@
 cff-version: 1.2.0
 title: "Open FEM Agent: A Multi-Solver MCP Server for LLM-Driven Computational Mechanics"
-message: "If you use this software, please cite both the software (this CITATION file) and the accompanying paper."
+message: "If you use this software, please cite it using the metadata in this file."
 type: software
 authors:
   - family-names: Hermann
     given-names: Alexander
     affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
-    email: alx.hermann@googlemail.com
 repository-code: "https://github.com/Hereon-InstituteMS/Open-FEM-agent"
 url: "https://github.com/Hereon-InstituteMS/Open-FEM-agent"
 abstract: >-
@@ -33,13 +32,3 @@ keywords:
 license: MIT
 version: "1.0.0"
 date-released: "2026-05-26"
-preferred-citation:
-  type: article
-  title: "Open FEM Agent: A Multi-Solver MCP Server for LLM-Driven Computational Mechanics"
-  authors:
-    - family-names: Hermann
-      given-names: Alexander
-      affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
-  year: 2026
-  journal: "npj Artificial Intelligence"
-  notes: "In preparation. A Zenodo DOI for this release will be added once the GitHub-Zenodo integration is enabled."

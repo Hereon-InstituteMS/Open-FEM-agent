@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import re
 import sys
 from collections import defaultdict
@@ -37,7 +38,10 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT_OUT = ROOT / "report" / "out"
 CSV = REPORT_OUT / "all_rows.csv"
 STATS_JSON = REPORT_OUT / "stats.json"
-SESSION_DIR = Path("/home/alexander/.claude/projects/-home-alexander-Schreibtisch-open-fem-agent")
+SESSION_DIR = Path(os.environ.get(
+    "OPEN_FEM_SESSION_DIR",
+    Path.home() / ".claude" / "projects",
+))
 
 TIER_OF = {
     **{f"A{i}": "A" for i in range(1, 6)},

@@ -163,7 +163,10 @@ def fingerprint_fourc() -> dict[str, Any]:
     binary = os.environ.get("FOURC_BINARY", "")
     if not binary:
         # Try common locations
-        for candidate in ["/home/alexander/4C/build/4C", "/opt/4c/bin/4C"]:
+        for candidate in [
+            os.path.expanduser("~/4C/build/4C"),
+            "/opt/4c/bin/4C",
+        ]:
             if Path(candidate).exists():
                 binary = candidate
                 break
