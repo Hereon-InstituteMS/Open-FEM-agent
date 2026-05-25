@@ -463,44 +463,130 @@ def fig_r4_tier_bars(rows: list[dict[str, Any]], out_path: Path) -> None:
 
 # --------------------------------------------------------------------------- #
 def fig_r4_deltas_only(rows: list[dict[str, Any]], out_path: Path) -> None:
-    """Standalone, full-width paired-delta plot for the main text."""
+    """Forest plot of paired pooled-rate differences with leave-one-task-out cloud.
+
+    Each row shows the bootstrap 95% CI and point estimate for a pairwise
+    pass-rate difference; the small dots below are the seventeen
+    leave-one-task-out (LOO) deltas, each one the difference recomputed
+    after dropping a single task. The LOO cloud answers the n=17
+    fragility concern: if the effect were driven by one task, dropping
+    that task would push a single dot far from the cluster.
+    Colour encodes significance: deep teal when the 95% bootstrap CI
+    strictly excludes zero; neutral grey (hollow marker) when the CI
+    touches or crosses zero.
+    """
     deltas = []
     if STATS_JSON.exists():
         sd = json.loads(STATS_JSON.read_text())
-        for key, label in [
-            ("bootstrap_BARE_vs_MCP_FULL",          "MCP-Full vs BARE"),
-            ("bootstrap_BARE_vs_MCP_NO_CRITIC",     "MCP-NoCritic vs BARE"),
-            ("bootstrap_MCP_FULL_vs_MCP_NO_CRITIC", "MCP-Full vs MCP-NoCritic"),
+        # Each entry: (stats key, label "A vs B" where delta means A − B, pair, sign)
+        # stats.py stores bootstrap_X_vs_Y as rate_Y − rate_X, so for rows whose
+        # label has the *first* item as the treatment, we need to negate.
+        for key, label, pair, sign in [
+            ("bootstrap_BARE_vs_MCP_FULL",          "MCP-Full vs BARE",         ("BARE", "MCP_FULL"),          +1),
+            ("bootstrap_BARE_vs_MCP_NO_CRITIC",     "MCP-NoCritic vs BARE",     ("BARE", "MCP_NO_CRITIC"),     +1),
+            ("bootstrap_MCP_FULL_vs_MCP_NO_CRITIC", "MCP-Full vs MCP-NoCritic", ("MCP_NO_CRITIC", "MCP_FULL"), -1),
         ]:
             d = sd.get(key)
             if d:
-                deltas.append((label, d["point_estimate"], d["ci_lo"], d["ci_hi"]))
-    fig, ax = plt.subplots(figsize=(7.2, 3.4))
+                if sign < 0:
+                    pe, lo, hi = -d["point_estimate"], -d["ci_hi"], -d["ci_lo"]
+                else:
+                    pe, lo, hi = d["point_estimate"], d["ci_lo"], d["ci_hi"]
+                # Suppress -0.0 cosmetic artefact from sign flip on exact zero
+                pe = pe if pe != 0.0 else 0.0
+                lo = lo if lo != 0.0 else 0.0
+                hi = hi if hi != 0.0 else 0.0
+                deltas.append((label, pe + 0.0, lo + 0.0, hi + 0.0, pair))
+
+    # Per-task counts for leave-one-task-out (LOO) deltas
+    by_task: dict[str, dict[str, list[bool]]] = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        by_task[r["task_id"]][r["condition"]].append(bool(r["passed"]))
+    all_tasks = sorted(by_task)
+
+    def loo_deltas(a: str, b: str) -> list[float]:
+        """Per-task LOO: drop one task, recompute pooled (rate_b - rate_a) in pp."""
+        out = []
+        for t_drop in all_tasks:
+            pa = pb = na = nb = 0
+            for t in all_tasks:
+                if t == t_drop:
+                    continue
+                d = by_task[t]
+                pa += sum(d.get(a, [])); na += len(d.get(a, []))
+                pb += sum(d.get(b, [])); nb += len(d.get(b, []))
+            if na > 0 and nb > 0:
+                out.append((pb / nb - pa / na) * 100.0)
+        return out
+
+    SIG_COLOR    = "#1b7a6b"   # deep teal: CI excludes zero
+    BORDER_COLOR = "#9aa0a6"   # neutral grey: CI touches/crosses zero
+    LOO_COLOR    = "#5e6b73"   # darker grey for LOO dots
+    ZERO_COLOR   = "#444444"
+
+    fig, ax = plt.subplots(figsize=(7.2, 2.8))
     yy = np.arange(len(deltas))
-    ax.errorbar(
-        [d[1] for d in deltas], yy,
-        xerr=[[d[1] - d[2] for d in deltas],
-              [d[3] - d[1] for d in deltas]],
-        fmt="o", color="black", markersize=6,
-        capsize=4, lw=1.2,
-    )
-    for i, d in enumerate(deltas):
-        ax.text(d[3] + 0.012, i,
-                f"Δ = {d[1]*100:+.1f} pp\n[{d[2]*100:+.1f}, {d[3]*100:+.1f}]",
-                va="center", fontsize=8)
-    ax.axvline(0, color="gray", lw=0.7, ls=":")
+    rng = np.random.default_rng(7)
+
+    for i, (label, pe, lo, hi, (a, b)) in enumerate(deltas):
+        sig = (lo > 0.0) or (hi < 0.0)
+        color = SIG_COLOR if sig else BORDER_COLOR
+        pe_pp, lo_pp, hi_pp = pe * 100, lo * 100, hi * 100
+        # CI bar
+        ax.plot([lo_pp, hi_pp], [i, i], color=color, lw=2.0,
+                solid_capstyle="butt", zorder=3)
+        # Marker
+        if sig:
+            ax.plot(pe_pp, i, "o", markersize=7,
+                    markerfacecolor=color, markeredgecolor=color, zorder=4)
+        else:
+            ax.plot(pe_pp, i, "o", markersize=7,
+                    markerfacecolor="white", markeredgecolor=color,
+                    markeredgewidth=1.5, zorder=4)
+        # LOO cloud just below the CI bar (visually, since y-axis inverted)
+        xs = loo_deltas(a, b)
+        ys = (i + 0.26) + rng.uniform(-0.05, 0.05, size=len(xs))
+        ax.scatter(xs, ys, s=12, c=LOO_COLOR, alpha=0.55,
+                   edgecolors="none", zorder=2)
+
+    # Zero reference
+    ax.axvline(0, color=ZERO_COLOR, lw=0.8, zorder=1)
+
+    # X axis
+    ax.set_xlim(-22, 60)
+    ax.set_xticks([-20, -10, 0, 10, 20, 30, 40])
+    ax.set_xticklabels(["-20", "-10", "0", "+10", "+20", "+30", "+40"],
+                       fontsize=10)
+    ax.set_xlabel(r"$\Delta$ pass rate (pp)", fontsize=10)
+
+    # Y axis
     ax.set_yticks(yy)
     ax.set_yticklabels([d[0] for d in deltas], fontsize=10)
-    ax.set_xlabel("change in pooled pass rate (percentage points)\n"
-                  "filled marker = point estimate; bar = 95% task-bootstrap interval",
-                  fontsize=9)
-    ax.set_xlim(-0.18, 0.40)
-    ax.set_xticks(np.arange(-0.15, 0.41, 0.05))
-    ax.set_xticklabels([f"{int(100*t):+d}" for t in np.arange(-0.15, 0.41, 0.05)])
-    ax.set_title("Pairwise differences in pass rate, 10 000-iteration task bootstrap",
-                 fontsize=10)
-    ax.grid(True, axis="x", alpha=0.3)
-    ax.invert_yaxis()
+    ax.set_ylim(len(deltas) - 0.55, -0.55)   # leave room for LOO cloud below last row
+
+    # Right-aligned monospace annotation column, comfortably clear of CIs/LOO
+    ann_x = 59
+    for i, (label, pe, lo, hi, _pair) in enumerate(deltas):
+        pe_pp, lo_pp, hi_pp = pe * 100, lo * 100, hi * 100
+        ax.text(ann_x, i,
+                f"{pe_pp:+5.1f}  [{lo_pp:+5.1f}, {hi_pp:+5.1f}]",
+                ha="right", va="center",
+                fontsize=9, family="monospace",
+                color="#222222")
+
+    # Inline legend for LOO dots (one-liner above the plot)
+    ax.text(-22, -0.55,
+            "Dots: leave-one-task-out deltas (17 per row)",
+            ha="left", va="bottom",
+            fontsize=8, color=LOO_COLOR, style="italic")
+
+    # Spines, ticks, grid
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    ax.tick_params(axis="y", length=0, pad=4)
+    ax.grid(True, axis="x", alpha=0.25, linestyle=":", zorder=0)
+    ax.set_axisbelow(True)
+
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
