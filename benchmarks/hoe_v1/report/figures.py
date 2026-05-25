@@ -268,7 +268,8 @@ def fig_r2_tier_c_orders(rows: list[dict[str, Any]], out_path: Path) -> None:
                yerr=errs, capsize=3,
                color=COND_COLOR[cond], edgecolor="white",
                linewidth=0.8, label=COND_LABEL[cond],
-               error_kw={"elinewidth": 0.9, "ecolor": "#222222"},
+               error_kw={"elinewidth": 1.3, "capthick": 1.3,
+                         "ecolor": "#222222"},
                zorder=2)
     # Reference lines at formal order per task
     for i, t in enumerate(c_tasks):
