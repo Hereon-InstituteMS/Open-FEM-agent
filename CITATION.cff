@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+title: "Open FEM Agent: A Multi-Solver MCP Server for LLM-Driven Computational Mechanics"
+message: "If you use this software, please cite both the software (this CITATION file) and the accompanying paper."
+type: software
+authors:
+  - family-names: Hermann
+    given-names: Alexander
+    affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
+    email: alx.hermann@googlemail.com
+repository-code: "https://github.com/Hereon-InstituteMS/Open-FEM-agent"
+url: "https://github.com/Hereon-InstituteMS/Open-FEM-agent"
+abstract: >-
+  Open FEM Agent is an open-source Model Context Protocol (MCP) server
+  that connects general-purpose LLM coding agents to seven independently
+  developed finite element solvers (FEniCSx, deal.II, 4C Multiphysics,
+  NGSolve, scikit-fem, Kratos Multiphysics, DUNE-fem). It exposes a
+  small set of shared tools for solver discovery, simulation
+  preparation, mesh generation, run execution, multi-solver coupling,
+  in-place solver development, and visualisation. A curated pitfall
+  knowledge base and a mandatory critic-sub-agent workflow are used
+  to verify simulations before they run.
+keywords:
+  - finite element method
+  - model context protocol
+  - llm agent
+  - computational mechanics
+  - multi-physics
+  - scientific computing
+  - fenics
+  - dealii
+  - ngsolve
+  - kratos
+license: MIT
+version: "1.0.0"
+date-released: "2026-05-26"
+preferred-citation:
+  type: article
+  title: "Open FEM Agent: A Multi-Solver MCP Server for LLM-Driven Computational Mechanics"
+  authors:
+    - family-names: Hermann
+      given-names: Alexander
+      affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
+  year: 2026
+  journal: "npj Artificial Intelligence"
+  notes: "In preparation. A Zenodo DOI for this release will be added once the GitHub-Zenodo integration is enabled."
