@@ -6,8 +6,22 @@ authors:
   - family-names: Hermann
     given-names: Alexander
     affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
+  - family-names: Shojaei
+    given-names: Arman
+    affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
+  - family-names: Scheider
+    given-names: Ingo
+    affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
+  - family-names: Cyron
+    given-names: Christian
+    affiliation: "Helmholtz-Zentrum Hereon, Institute of Materials Mechanics"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.20388035
+    description: "Zenodo archive of v1.0.0"
 repository-code: "https://github.com/Hereon-InstituteMS/Open-FEM-agent"
 url: "https://github.com/Hereon-InstituteMS/Open-FEM-agent"
+doi: 10.5281/zenodo.20388035
 abstract: >-
   Open FEM Agent is an open-source Model Context Protocol (MCP) server
   that connects general-purpose LLM coding agents to seven independently

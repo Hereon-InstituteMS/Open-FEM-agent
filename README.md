@@ -1,5 +1,8 @@
 # Open FEM Agent
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20388035.svg)](https://doi.org/10.5281/zenodo.20388035)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An open-source **Model Context Protocol (MCP) server** that connects AI coding agents to **seven independent finite element codes** (FEniCSx, deal.II, 4C Multiphysics, NGSolve, scikit-fem, Kratos Multiphysics, DUNE-fem). Any MCP-compatible AI tool (Claude Code, Cursor, Windsurf, GitHub Copilot) can **operate** solvers, **couple** them across codes, and **develop** new solver capabilities — all through one protocol.
 
 ## Key Numbers
