@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from tests.groundtruth import dealii as dealii_gt  # noqa: E402
 from tests.groundtruth import fourc as fourc_gt  # noqa: E402
+from tests.groundtruth import ngsolve as ngsolve_gt  # noqa: E402
 from tests.groundtruth import skfem as skfem_gt  # noqa: E402
 
 
@@ -410,6 +411,100 @@ class TestDealiiFiniteElementClasses(unittest.TestCase):
             if strict:
                 self.fail(msg)
             print(f"\n[WARN catalog drift]\n{msg}", file=sys.stderr)
+
+
+# ── NGSolve ──────────────────────────────────────────────────────────────────
+
+
+# Curated list of high-value ngsolve identifiers commonly emitted by
+# the catalog templates.  Whitelist beats regex here because the
+# templates also contain user-defined helper functions, single-letter
+# math symbols (``A``, ``B``, ``E``, ``H``, ``J2``, ``Q``) used as
+# variables, and submodule classes (``Sphere``, ``OrthoBrick`` from
+# ``ngsolve.csg``).  An open regex over-matches all of those; this
+# whitelist limits the check to identifiers whose drift (rename or
+# removal upstream) would silently break agent-generated scripts.
+#
+# Extend this list when adding new templates that reference more of
+# the ngsolve API.  Anything not in the list is simply skipped --
+# wrong-name typos for already-listed names are still caught.
+_NGSOLVE_CORE_IDENTIFIERS: tuple[str, ...] = (
+    # FE spaces
+    "H1", "HCurl", "HDiv", "L2", "NumberSpace",
+    "VectorH1", "VectorL2", "FESpace", "Compress",
+    # Mesh + geometry primitives reachable via `from ngsolve import *`
+    "Mesh",
+    # Forms and the solver pipeline
+    "BilinearForm", "LinearForm", "GridFunction",
+    # Operators / integrators
+    "Integrate", "InnerProduct", "grad", "div", "curl",
+    # Coefficient handling and IO
+    "CoefficientFunction", "Parameter", "VTKOutput",
+    # Boundary / volume markers
+    "VOL", "BND", "BBND",
+)
+
+
+def _collect_ngsolve_mentions() -> set[str]:
+    """Return the subset of ``_NGSOLVE_CORE_IDENTIFIERS`` actually
+    referenced in any ngsolve generator template.  We scan the raw
+    .py source for word-boundary matches; the catalog mention set is
+    the intersection of "in the templates" and "on the watchlist".
+    """
+    out: set[str] = set()
+    ngs_dir = Path(__file__).parent.parent / "src" / "backends" / "ngsolve" / "generators"
+    if not ngs_dir.is_dir():
+        return out
+    blob = "".join(
+        py.read_text(encoding="utf-8", errors="replace")
+        for py in ngs_dir.rglob("*.py")
+    )
+    for name in _NGSOLVE_CORE_IDENTIFIERS:
+        if re.search(rf"\b{re.escape(name)}\b", blob):
+            out.add(name)
+    return out
+
+
+class TestNgsolveAttributes(unittest.TestCase):
+    """Every watch-listed ngsolve identifier that the catalog uses must
+    exist as a public attribute on the installed ``ngsolve`` module.
+
+    Catches drift-style failures like the package renaming ``H1`` to
+    ``H1FESpace`` or moving ``Integrate`` into a submodule -- both
+    of which would silently break agent-generated scripts.  Wider
+    coverage would require AST-parsing the multi-line template
+    strings to separate user-defined helpers from imports; this
+    targeted whitelist is the trade-off until that work is done.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.source = ngsolve_gt.public_attrs()
+        if cls.source is None:
+            raise unittest.SkipTest(
+                "NGSolve not installed (pip install ngsolve)"
+            )
+        cls.mentions = _collect_ngsolve_mentions()
+
+    def test_watchlist_mentions_are_real(self):
+        # A successful run will normally have a non-empty mention set
+        # (the templates do use H1, BilinearForm, etc.).  An empty
+        # mention set after the generators directory exists usually
+        # signals that the templates moved, so we assert non-empty
+        # too -- otherwise the test passes vacuously.
+        self.assertTrue(
+            self.mentions,
+            "No watch-listed ngsolve identifiers found in templates -- "
+            "either the catalog moved or _NGSOLVE_CORE_IDENTIFIERS "
+            "needs updating.",
+        )
+        unknown = self.mentions - self.source
+        self.assertFalse(
+            unknown,
+            f"\nNGSolve catalog references identifiers that are not "
+            f"public attributes of ngsolve: {sorted(unknown)}\n"
+            f"Source has ~{len(self.source)} public attrs.",
+        )
 
 
 if __name__ == "__main__":

@@ -27,9 +27,10 @@ def fenics_solver_types() -> None:
     return None
 
 
-# ── NGSolve (Python introspection) ────────────────────────────────────────
-def ngsolve_finite_element_spaces() -> None:
-    return None
+# NGSolve -- implemented in ``ngsolve.py`` (Python introspection family).
+# Currently exposes ``public_attrs()``; broader probes (specific FE-space
+# subclasses, solver factories) can either extend ``ngsolve.py`` or follow
+# its pattern in additional modules.
 
 
 # scikit-fem -- implemented in ``skfem.py`` (Python introspection family).

@@ -36,12 +36,16 @@ jobs:
           python-version: '3.12'
 
       - name: Install minimal dependencies + introspection backends
-        # scikit-fem is the only Python-introspection backend currently
-        # probed; install it so its catalog-consistency tests actually run
-        # rather than skipping in CI.  Other introspection backends
-        # (fenics, ngsolve, kratos, dune) will be added here as their
-        # probes land.
-        run: pip install -e ".[skfem,dev]"
+        # Install the Python-importable backends that have a probe
+        # in tests/groundtruth/ so their catalog-consistency tests
+        # actually run in CI rather than skipping.  Source-grep
+        # backends (4C, deal.II) need no install -- they fetch from
+        # raw.githubusercontent.com.
+        #
+        # When adding a new introspection probe (kratos, dune,
+        # fenics) extend this extra list and the test runs
+        # automatically on every PR.
+        run: pip install -e ".[skfem,ngsolve,dev]"
 
       - name: Run lightweight gating tests
         # Catalog-consistency + ingest-pipeline tests are the suite of
