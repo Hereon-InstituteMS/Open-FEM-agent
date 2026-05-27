@@ -75,29 +75,49 @@ class StructuralDynamicsGenerator(BaseGenerator):
                 "MAT_ElastHyper + ELAST_CoupNeoHooke": {
                     "description": (
                         "Neo-Hookean hyperelastic for large-deformation dynamics.  "
-                        "DENS is set in the MAT_ElastHyper wrapper."
+                        "DENS / NUMMAT / MATIDS / POLYCONVEX live on the "
+                        "MAT_ElastHyper wrapper; YOUNG / NUE live on the "
+                        "ELAST_CoupNeoHooke sub-material."
                     ),
                     "parameters": {
-                        "YOUNG": {"description": "Young's modulus", "range": "> 0"},
-                        "NUE": {"description": "Poisson's ratio", "range": "0 < nu < 0.5"},
-                        "DENS": {"description": "Mass density (in MAT_ElastHyper)", "range": "> 0"},
+                        "YOUNG": {"description": "Young's modulus (sub-material)", "range": "> 0"},
+                        "NUE": {"description": "Poisson's ratio (sub-material)", "range": "0 < nu < 0.5"},
+                        "DENS": {"description": "Mass density (wrapper)", "range": "> 0"},
+                        "NUMMAT": {"description": "Number of sub-materials (wrapper)", "range": "1"},
+                        "MATIDS": {"description": "List of sub-material IDs (wrapper)", "range": "[<id>]"},
+                        "POLYCONVEX": {
+                            "description": "Polyconvexity check flag (wrapper)",
+                            "range": "0 | 1",
+                        },
                     },
                 },
             },
             "time_integration": {
                 "DYNAMICTYPE": (
-                    "Time integrator selection.  Options:\n"
-                    "  'GenAlpha' -- Generalised-Alpha (RECOMMENDED).  Implicit, "
-                    "second-order accurate, controllable high-frequency damping "
-                    "via RHO_INF.  Best all-round choice.\n"
+                    "Time integrator selection.  Keyword strings below match the "
+                    "4C input parser (src/inpar/4C_inpar_structure.cpp).\n"
+                    "Implicit options:\n"
+                    "  'GenAlpha' -- Generalised-Alpha (RECOMMENDED for most problems).  "
+                    "Implicit, second-order accurate, controllable high-frequency "
+                    "damping via RHO_INF.  Best all-round choice.\n"
                     "  'GenAlphaLieGroup' -- Lie-group variant for beam elements "
                     "with rotational DOFs.  Required for BEAM3R/BEAM3K dynamics.\n"
                     "  'OneStepTheta' -- Theta-method (theta=0.5: Newmark, "
                     "theta=1.0: backward Euler).  Simpler but less control "
                     "over numerical dissipation.\n"
-                    "  'ExplEuler' -- Explicit forward Euler.  Conditionally "
-                    "stable; requires very small time steps (CFL condition).  "
-                    "Only for very short transients or wave propagation."
+                    "Explicit options (matrix-free, CFL-constrained, no global Newton):\n"
+                    "  'CentrDiff' -- Central differences.  Second-order accurate, "
+                    "the standard choice for explicit solid dynamics (impact, "
+                    "wave propagation, high strain rates).\n"
+                    "  'AdamsBashforth2' -- Two-step Adams-Bashforth, second-order.\n"
+                    "  'AdamsBashforth4' -- Four-step Adams-Bashforth, fourth-order "
+                    "(higher accuracy but larger startup cost and stricter stability).\n"
+                    "  'ExplicitEuler' -- Forward Euler, first-order.  Only for "
+                    "diagnostic / very short transients -- prefer CentrDiff.\n"
+                    "All explicit schemes require dt < h/c (CFL).  Whether a "
+                    "given plasticity / damage material is wired to the explicit "
+                    "path depends on its evaluate() interface -- verify with a "
+                    "small benchmark before relying on it."
                 ),
                 "GenAlpha_parameters": (
                     "Configured in the 'STRUCTURAL DYNAMIC/GENALPHA' sub-section.  "

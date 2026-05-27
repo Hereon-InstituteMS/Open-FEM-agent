@@ -86,6 +86,22 @@ class ALEGenerator(BaseGenerator):
                             ),
                             "range": "(0, 0.5)",
                         },
+                        "MODE (LogNeoHooke)": {
+                            "description": (
+                                "Interpretation of C1/C2.  'YN' = Young's "
+                                "modulus + Poisson's ratio; 'Lame' = Lame "
+                                "parameters lambda + mu."
+                            ),
+                            "range": "YN | Lame",
+                        },
+                        "POLYCONVEX": {
+                            "description": (
+                                "MAT_ElastHyper wrapper flag: enable a runtime "
+                                "polyconvexity check on the strain-energy "
+                                "function (0 = off, 1 = on)."
+                            ),
+                            "range": "0 | 1",
+                        },
                     },
                 },
                 "MAT_Struct_StVenantKirchhoff": {

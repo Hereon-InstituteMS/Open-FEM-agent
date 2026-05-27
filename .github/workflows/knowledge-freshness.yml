@@ -8,10 +8,77 @@ on:
       - 'data/**'
       - 'src/tools/deep_knowledge.py'
       - 'src/backends/*/backend.py'
+  pull_request:
+    paths:
+      - 'src/backends/**'
+      - 'src/tools/deep_knowledge.py'
+      - 'tests/groundtruth/**'
+      - 'tests/test_catalog_consistency.py'
   workflow_dispatch:  # Manual trigger
 
 jobs:
+  catalog-consistency:
+    # Lightweight: greps backend source for the canonical names the catalog
+    # promises (currently 4C only; extension pattern in tests/groundtruth/).
+    # Always runs (PR + push + cron) -- network-only, no solver installs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal dependencies + introspection backends
+        # scikit-fem is the only Python-introspection backend currently
+        # probed; install it so its catalog-consistency tests actually run
+        # rather than skipping in CI.  Other introspection backends
+        # (fenics, ngsolve, kratos, dune) will be added here as their
+        # probes land.
+        run: pip install -e ".[skfem,dev]"
+
+      - name: Run catalog-consistency tests
+        # Tee into a file so the issue-creation step can reuse the
+        # exact output that produced the failure -- avoiding misleading
+        # issues if a second pytest run produces different output
+        # (e.g. cache repopulated, network hiccup resolved).
+        run: |
+          set -o pipefail
+          pytest tests/test_catalog_consistency.py -v -s 2>&1 | tee /tmp/catalog-test.log
+        # Only swallow failures on the weekly cron so the auto-issue step
+        # can still run.  On PRs and pushes we WANT the workflow to fail
+        # so the check is gating.
+        continue-on-error: ${{ github.event_name == 'schedule' }}
+        id: catalog
+
+      - name: Create issue on catalog drift
+        # Only auto-file an issue on scheduled runs.  PR failures fail the
+        # workflow above and surface through the PR's status check.
+        if: steps.catalog.outcome == 'failure' && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.existsSync('/tmp/catalog-test.log')
+              ? fs.readFileSync('/tmp/catalog-test.log', 'utf8')
+              : '(test output not captured)';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Catalog/source drift detected',
+              body: `Weekly catalog-consistency check failed:\n\n\`\`\`\n${output.slice(-6000)}\n\`\`\`\n\nA backend source change has broken the MCP catalog.  Edit the catalog so its parameter keys / DYNAMICTYPE strings / etc. match what the input parser now accepts.`,
+              labels: ['knowledge-drift'],
+            });
+
   fingerprint:
+    # Only run the heavy ``.[all-solvers,dev]`` install + fingerprint scan
+    # on push and on the weekly cron.  PRs are gated on
+    # ``catalog-consistency`` only -- adding fingerprint to every PR
+    # would install all pip-installable solvers (hundreds of MB) on
+    # ubuntu-latest and frequently exceed the runner timeout, turning a
+    # heavyweight monitoring job into a noisy PR blocker.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

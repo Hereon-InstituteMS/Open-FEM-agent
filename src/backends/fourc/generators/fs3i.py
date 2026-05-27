@@ -140,6 +140,10 @@ class FS3IGenerator(BaseGenerator):
                             "description": "Structural density [kg/m^3]",
                             "range": "> 0",
                         },
+                        "POLYCONVEX": {
+                            "description": "Polyconvexity check flag (wrapper)",
+                            "range": "0 | 1",
+                        },
                     },
                 },
             },
