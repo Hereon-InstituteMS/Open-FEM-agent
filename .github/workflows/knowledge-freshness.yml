@@ -9,11 +9,16 @@ on:
       - 'src/tools/deep_knowledge.py'
       - 'src/backends/*/backend.py'
   pull_request:
+    # Broad path filter so the lightweight tests gate every PR that
+    # could affect the catalog, the tooling around it, or the ingest
+    # pipeline.  Pure-docs PRs that touch only README.md / *.md still
+    # skip CI (documented intent); anything code-touching runs.
     paths:
-      - 'src/backends/**'
-      - 'src/tools/deep_knowledge.py'
-      - 'tests/groundtruth/**'
-      - 'tests/test_catalog_consistency.py'
+      - 'src/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - '.github/workflows/knowledge-freshness.yml'
   workflow_dispatch:  # Manual trigger
 
 jobs:
@@ -38,14 +43,17 @@ jobs:
         # probes land.
         run: pip install -e ".[skfem,dev]"
 
-      - name: Run catalog-consistency tests
-        # Tee into a file so the issue-creation step can reuse the
-        # exact output that produced the failure -- avoiding misleading
-        # issues if a second pytest run produces different output
-        # (e.g. cache repopulated, network hiccup resolved).
+      - name: Run lightweight gating tests
+        # Catalog-consistency + ingest-pipeline tests are the suite of
+        # checks that need no solver installs.  Keep them together in
+        # one fast job that gates every PR.  Tee into a file so the
+        # issue-creation step can reuse the exact output that produced
+        # the failure -- avoiding misleading issues if a second pytest
+        # run produces different output (e.g. cache repopulated,
+        # network hiccup resolved).
         run: |
           set -o pipefail
-          pytest tests/test_catalog_consistency.py -v -s 2>&1 | tee /tmp/catalog-test.log
+          pytest tests/test_catalog_consistency.py tests/test_ingest_session.py -v -s 2>&1 | tee /tmp/catalog-test.log
         # Only swallow failures on the weekly cron so the auto-issue step
         # can still run.  On PRs and pushes we WANT the workflow to fail
         # so the check is gating.
