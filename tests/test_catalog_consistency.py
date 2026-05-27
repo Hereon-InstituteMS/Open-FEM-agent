@@ -25,6 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from tests.groundtruth import dealii as dealii_gt  # noqa: E402
 from tests.groundtruth import fourc as fourc_gt  # noqa: E402
 from tests.groundtruth import skfem as skfem_gt  # noqa: E402
 
@@ -310,6 +311,105 @@ class TestSkfemElementMeshClasses(unittest.TestCase):
             f"not exist on `skfem`: {sorted(unknown)}\n"
             f"Available: {sorted(self.source_meshes)}",
         )
+
+
+# ── deal.II ──────────────────────────────────────────────────────────────────
+
+
+_DEALII_FE_RE = re.compile(r"\bFE_[A-Z][A-Za-z0-9_]*\b")
+
+
+def _collect_dealii_fe_mentions() -> set[str]:
+    """Return every ``FE_*`` class name referenced anywhere the
+    deal.II catalog touches.
+
+    Three places reference FE_* names and all three are scanned:
+
+    * ``src/backends/dealii/generators/*.py`` -- per-physics template
+      code and structured knowledge blocks (live in the same file).
+    * ``src/backends/dealii/backend.py`` and any other top-level
+      module in the deal.II backend package -- e.g. supported-
+      physics declarations sometimes embed example element names.
+    * ``src/tools/deep_knowledge.py`` -- the cross-cutting catalog
+      module hosting ``_DEALII_KNOWLEDGE``.  A typo'd FE_* name added
+      to that dict would be invisible to a generator-only scan.
+
+    All three are read as raw .py source: the catalog embeds template
+    code as multi-line string literals, and runtime knowledge dicts
+    are defined in those same files, so a single grep over the .py
+    text picks up both at once.
+    """
+    out: set[str] = set()
+    repo_src = Path(__file__).parent.parent / "src"
+    paths: list[Path] = []
+    dealii_dir = repo_src / "backends" / "dealii"
+    if dealii_dir.is_dir():
+        paths.extend(dealii_dir.rglob("*.py"))
+    deep_knowledge = repo_src / "tools" / "deep_knowledge.py"
+    if deep_knowledge.is_file():
+        paths.append(deep_knowledge)
+    for py in paths:
+        out.update(
+            _DEALII_FE_RE.findall(
+                py.read_text(encoding="utf-8", errors="replace")
+            )
+        )
+    return out
+
+
+class TestDealiiFiniteElementClasses(unittest.TestCase):
+    """Every ``FE_*`` name the deal.II catalog mentions (in either
+    knowledge prose or generated Python template code) must be a real
+    concrete class under ``include/deal.II/fe/``."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.source = dealii_gt.fe_class_names()
+        if cls.source is None:
+            raise unittest.SkipTest(
+                "deal.II source unavailable "
+                "(set DEALII_ROOT or enable network access)"
+            )
+        cls.mentions = _collect_dealii_fe_mentions()
+
+    def test_no_unknown_fe_class_in_catalog(self):
+        unknown = self.mentions - self.source
+        # Tolerate a small denylist of "marker" or "abstract" base
+        # references that show up in prose but never get instantiated
+        # in template code.
+        unknown -= {"FE_Base", "FE_Data"}
+        self.assertFalse(
+            unknown,
+            f"\ndeal.II catalog references FE_* classes that do not "
+            f"exist in deal.II source: {sorted(unknown)}\n"
+            f"Source has {len(self.source)} concrete FE_* classes. "
+            f"First 15: {sorted(self.source)[:15]}",
+        )
+
+    def test_under_declared_fe_classes(self):
+        """Soft check: ``FE_*`` classes that exist in deal.II source but
+        are never mentioned by the catalog.  Each unmentioned class is
+        a feature the agent will never propose -- not strictly wrong,
+        but a gap worth surfacing.
+
+        Mirrors the 4C ``test_required_keys_present_in_catalog`` --
+        prints to stderr by default, fails the test only when
+        ``OFA_STRICT_CATALOG=1`` is set so the under-declaration list
+        does not block PRs.
+        """
+        import os
+
+        strict = os.environ.get("OFA_STRICT_CATALOG") == "1"
+        gap = self.source - self.mentions
+        if gap:
+            msg = (
+                f"deal.II catalog under-declares FE_* classes "
+                f"({len(gap)} unmentioned of {len(self.source)} in source): "
+                f"{sorted(gap)}"
+            )
+            if strict:
+                self.fail(msg)
+            print(f"\n[WARN catalog drift]\n{msg}", file=sys.stderr)
 
 
 if __name__ == "__main__":
