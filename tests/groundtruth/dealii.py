@@ -220,10 +220,22 @@ def fe_class_names() -> set[str] | None:
     if headers is None:
         return None
     classes: set[str] = set()
+    failed: list[str] = []
     for h in headers:
         content = fetch_source(f"include/deal.II/fe/{h}")
         if content is None:
+            failed.append(h)
             continue
         for m in _CLASS_RE.finditer(content):
             classes.add(f"FE_{m.group(1)}")
+    if failed:
+        # Treat any header-fetch failure as "source unavailable" so the
+        # downstream test skips instead of running against a partial
+        # source set that could produce false failures (a catalog
+        # mention that legitimately exists in deal.II but happens to
+        # live in a header we failed to fetch would otherwise look
+        # like a "catalog promises unknown class" violation).  The
+        # successfully-fetched headers stay in the cache so the next
+        # run only re-fetches the failed ones.
+        return None
     return classes

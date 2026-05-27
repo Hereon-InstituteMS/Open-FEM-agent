@@ -320,25 +320,40 @@ _DEALII_FE_RE = re.compile(r"\bFE_[A-Z][A-Za-z0-9_]*\b")
 
 
 def _collect_dealii_fe_mentions() -> set[str]:
-    """Return every ``FE_*`` class name referenced anywhere in the
-    deal.II generator package.
+    """Return every ``FE_*`` class name referenced anywhere the
+    deal.II catalog touches.
 
-    Scans the raw Python source of each generator module rather than
-    walking the runtime knowledge dicts -- the catalog embeds template
-    code as multi-line string literals in those modules and the agent
-    will execute the templates, so every ``FE_*`` mention in those
-    files (KNOWLEDGE prose AND template code) must resolve to a real
-    deal.II class.  Reading the .py source covers both at once.
+    Three places reference FE_* names and all three are scanned:
+
+    * ``src/backends/dealii/generators/*.py`` -- per-physics template
+      code and structured knowledge blocks (live in the same file).
+    * ``src/backends/dealii/backend.py`` and any other top-level
+      module in the deal.II backend package -- e.g. supported-
+      physics declarations sometimes embed example element names.
+    * ``src/tools/deep_knowledge.py`` -- the cross-cutting catalog
+      module hosting ``_DEALII_KNOWLEDGE``.  A typo'd FE_* name added
+      to that dict would be invisible to a generator-only scan.
+
+    All three are read as raw .py source: the catalog embeds template
+    code as multi-line string literals, and runtime knowledge dicts
+    are defined in those same files, so a single grep over the .py
+    text picks up both at once.
     """
     out: set[str] = set()
-    generators_dir = Path(__file__).parent.parent / "src" / "backends" / "dealii" / "generators"
-    if generators_dir.is_dir():
-        for py in generators_dir.glob("*.py"):
-            out.update(
-                _DEALII_FE_RE.findall(
-                    py.read_text(encoding="utf-8", errors="replace")
-                )
+    repo_src = Path(__file__).parent.parent / "src"
+    paths: list[Path] = []
+    dealii_dir = repo_src / "backends" / "dealii"
+    if dealii_dir.is_dir():
+        paths.extend(dealii_dir.rglob("*.py"))
+    deep_knowledge = repo_src / "tools" / "deep_knowledge.py"
+    if deep_knowledge.is_file():
+        paths.append(deep_knowledge)
+    for py in paths:
+        out.update(
+            _DEALII_FE_RE.findall(
+                py.read_text(encoding="utf-8", errors="replace")
             )
+        )
     return out
 
 
