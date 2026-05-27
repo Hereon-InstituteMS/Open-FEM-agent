@@ -109,33 +109,41 @@ class TestIngestCliApprove(unittest.TestCase):
     """
 
     def test_approve_writes_pending_file(self):
-        # Use a temp directory for both journals and (via env override
-        # of the repo root) the pending output.  The CLI writes
-        # relative to REPO_ROOT which is hard-coded at import; rather
-        # than mocking that, we point at the live pending/ dir and
-        # remove the artefact afterwards.
+        # The CLI writes relative to REPO_ROOT which is hard-coded at
+        # import.  Rather than mock that, we record what's already in
+        # pending/, run the CLI, and remove only the artefacts the CLI
+        # created -- regardless of whether the subsequent assertions
+        # pass or fail.  The try/finally is critical: a stray
+        # session_batch_*.json left behind would leak into the next
+        # run and could pollute a real contributor's pending/ dir.
         pending_dir = REPO_ROOT / "data" / "community_knowledge" / "pending"
-        before = set(pending_dir.glob("session_batch_*.json")) if pending_dir.exists() else set()
-
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            _build_fixture_journal("approve-fix-001").save(tmp_path)
-
-            result = subprocess.run(
-                [
-                    sys.executable, str(REPO_ROOT / "scripts" / "ingest_session.py"),
-                    str(tmp_path), "--approve",
-                ],
-                capture_output=True, text=True, timeout=30,
-            )
-        self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("Saved", result.stdout)
-
-        after = set(pending_dir.glob("session_batch_*.json"))
-        new_files = sorted(after - before)
-        self.assertEqual(len(new_files), 1, "exactly one batch file expected")
-
+        before = (
+            set(pending_dir.glob("session_batch_*.json"))
+            if pending_dir.exists() else set()
+        )
+        new_files: list[Path] = []
         try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                _build_fixture_journal("approve-fix-001").save(tmp_path)
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(REPO_ROOT / "scripts" / "ingest_session.py"),
+                        str(tmp_path), "--approve",
+                    ],
+                    capture_output=True, text=True, timeout=30,
+                )
+            after = (
+                set(pending_dir.glob("session_batch_*.json"))
+                if pending_dir.exists() else set()
+            )
+            new_files = sorted(after - before)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("Saved", result.stdout)
+            self.assertEqual(
+                len(new_files), 1, "exactly one batch file expected"
+            )
             entries = json.loads(new_files[0].read_text())
             self.assertIsInstance(entries, list)
             self.assertGreaterEqual(len(entries), 1)

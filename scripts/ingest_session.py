@@ -14,7 +14,9 @@ Usage:
     python scripts/ingest_session.py <path> --solver fourc   # filter by solver
 
 <path> may be a single ``session_*.json`` file or a directory; the
-directory case scans for ``session_*.json`` recursively-via-glob.
+directory case scans for ``session_*.json`` recursively (via
+``rglob``), so nested layouts like ``data/sessions/2026-05/`` are
+picked up automatically.
 
 This is the offline equivalent of calling ``session_insights('ingest',
 path=...)`` from inside Claude Code -- useful for community
@@ -59,7 +61,7 @@ def _normalise_title(title: str) -> str:
 
 def _gather(path: Path) -> list[Path]:
     if path.is_dir():
-        return sorted(path.glob("session_*.json"))
+        return sorted(path.rglob("session_*.json"))
     if path.is_file():
         return [path]
     return []
@@ -165,17 +167,17 @@ def main() -> int:
 
 
 def _existing_pitfalls(solver: str) -> list[str]:
-    """Lightweight version of consolidated._collect_existing_pitfalls()
+    """Lightweight version of ``consolidated._collect_existing_pitfalls()``
     that avoids importing the MCP server module (which spins up its
-    FastMCP context).  Walks the registered backends directly.
+    FastMCP context).  Uses only the public registry surface.
     """
-    from core.registry import load_all_backends, _backends
+    from core.registry import available_backends, load_all_backends
     pitfalls: list[str] = []
     try:
         load_all_backends()
     except Exception:
         return pitfalls
-    for b in _backends.values():
+    for b in available_backends():
         if solver and b.name() != solver:
             continue
         try:

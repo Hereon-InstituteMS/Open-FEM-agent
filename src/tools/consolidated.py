@@ -1203,8 +1203,9 @@ def register_consolidated_tools(mcp: FastMCP):
         """
         from pathlib import Path as _Path
 
-        from core.session_journal import SessionJournal, get_journal
+        from core.session_journal import get_journal
         from core.session_analyzer import (
+            CandidateKnowledge,
             analyze_journal,
             analyze_journal_file,
             filter_against_existing,
@@ -1270,7 +1271,7 @@ def register_consolidated_tools(mcp: FastMCP):
             _retry_re = _re.compile(r"\s*\(retry \d+\)\s*$", _re.IGNORECASE)
             def _norm_title(t: str) -> str:
                 return " ".join(_retry_re.sub("", t).lower().split())
-            best: dict[tuple[str, str, str], object] = {}
+            best: dict[tuple[str, str, str], CandidateKnowledge] = {}
             for c in all_candidates:
                 key = (
                     c.category.strip().lower(),
