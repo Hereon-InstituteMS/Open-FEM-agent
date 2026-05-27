@@ -1171,22 +1171,45 @@ def register_consolidated_tools(mcp: FastMCP):
     # ═══════════════════════════════════════════════════════════
 
     @mcp.tool()
-    def session_insights(action: str = "review") -> str:
-        """Review knowledge discovered during this session.
+    def session_insights(action: str = "review", path: str = "") -> str:
+        """Review knowledge discovered during this session or from saved
+        journals on disk.
 
-        After your simulation session, call this to see what the agent
-        learned that could help future users.
+        Two flows are supported:
+
+        * In-session flow: call ``review`` -> ``approve_all`` /
+          ``reject_all`` during the live MCP session to surface
+          candidates from the current journal and save approved ones
+          to ``data/community_knowledge/pending/``.
+        * Ingest flow: call ``ingest`` with ``path`` pointing at a
+          previously-saved session journal (``data/sessions/session_*.json``,
+          which the server writes on shutdown) or at a directory of
+          such files.  Candidates are surfaced just like ``review``
+          and can be approved with ``approve_all``.
 
         Args:
             action:
-                - "review" — show candidate knowledge for approval
-                - "approve_all" — approve all candidates for contribution
-                - "reject_all" — dismiss all candidates
-                - "stats" — session statistics (events, solvers, errors)
+                - "review" — show candidate knowledge from the current
+                  session for approval
+                - "ingest" — load saved journal(s) from ``path`` and
+                  analyse them; requires ``path``
+                - "approve_all" — approve all pending candidates and
+                  save to community_knowledge/pending/
+                - "reject_all" — dismiss all pending candidates
+                - "stats" — current session statistics
+            path: file or directory used by the ``ingest`` action;
+                ignored otherwise.  Directories are scanned for
+                ``session_*.json``.
         """
+        from pathlib import Path as _Path
+
         from core.session_journal import get_journal
         from core.session_analyzer import (
-            analyze_journal, filter_against_existing, format_candidates,
+            CandidateKnowledge,
+            analyze_journal,
+            analyze_journal_file,
+            filter_against_existing,
+            format_candidates,
         )
 
         journal = get_journal()
@@ -1214,6 +1237,64 @@ def register_consolidated_tools(mcp: FastMCP):
             _pending_candidates.clear()
             _pending_candidates.extend(candidates)
             return format_candidates(candidates)
+
+        if action == "ingest":
+            if not path:
+                return (
+                    "Usage: session_insights('ingest', path='<file_or_dir>')\n"
+                    "Point at a session journal saved by the MCP server "
+                    "(data/sessions/session_*.json) or a directory of "
+                    "such files."
+                )
+            p = _Path(path)
+            if not p.exists():
+                return f"Path not found: {p}"
+            sources: list[_Path] = (
+                sorted(p.glob("session_*.json")) if p.is_dir() else [p]
+            )
+            if not sources:
+                return f"No session_*.json files found in {p}"
+            all_candidates: list = []
+            errors: list[str] = []
+            for s in sources:
+                try:
+                    all_candidates.extend(analyze_journal_file(s))
+                except Exception as e:
+                    # repr(e) keeps the exception type so a contributor
+                    # can tell `KeyError('events')` from a `FileNotFoundError`.
+                    errors.append(f"{s.name}: {e!r}")
+            # Cross-source de-duplication on a normalised key (the in-file
+            # analyzer runs fuzzy dedup already; cross-file dedup needs to
+            # match that contract or near-identical entries from N journals
+            # all survive as separate candidates).
+            import re as _re
+            _retry_re = _re.compile(r"\s*\(retry \d+\)\s*$", _re.IGNORECASE)
+            def _norm_title(t: str) -> str:
+                return " ".join(_retry_re.sub("", t).lower().split())
+            best: dict[tuple[str, str, str], CandidateKnowledge] = {}
+            for c in all_candidates:
+                key = (
+                    c.category.strip().lower(),
+                    (c.solver or "").strip().lower(),
+                    _norm_title(c.title),
+                )
+                if key not in best or c.confidence > best[key].confidence:
+                    best[key] = c
+            candidates = list(best.values())
+            existing = _collect_existing_pitfalls()
+            candidates = filter_against_existing(candidates, existing)
+            _pending_candidates.clear()
+            _pending_candidates.extend(candidates)
+            header = (
+                f"Ingested {len(sources)} journal file(s); "
+                f"{len(all_candidates)} raw candidates -> "
+                f"{len(candidates)} novel after dedup + filter.\n"
+            )
+            if errors:
+                header += "Errors:\n  " + "\n  ".join(errors) + "\n"
+            if not candidates:
+                return header + "No new candidates."
+            return header + format_candidates(candidates)
 
         if action == "approve_all":
             if not _pending_candidates:
