@@ -30,8 +30,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install minimal dependencies
-        run: pip install -e ".[dev]"
+      - name: Install minimal dependencies + introspection backends
+        # scikit-fem is the only Python-introspection backend currently
+        # probed; install it so its catalog-consistency tests actually run
+        # rather than skipping in CI.  Other introspection backends
+        # (fenics, ngsolve, kratos, dune) will be added here as their
+        # probes land.
+        run: pip install -e ".[skfem,dev]"
 
       - name: Run catalog-consistency tests
         run: pytest tests/test_catalog_consistency.py -v -s

@@ -35,9 +35,8 @@ def ngsolve_finite_element_spaces() -> None:
     return None
 
 
-# ── scikit-fem (Python introspection) ─────────────────────────────────────
-def skfem_element_classes() -> None:
-    return None
+# scikit-fem -- implemented in ``skfem.py`` (Python introspection family).
+# Use that module directly; the stub below is removed.
 
 
 # ── Kratos Multiphysics (Python + JSON registries) ────────────────────────

@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from tests.groundtruth import fourc as fourc_gt  # noqa: E402
+from tests.groundtruth import skfem as skfem_gt  # noqa: E402
 
 
 def _normalise_key(raw: str) -> str:
@@ -229,6 +230,84 @@ class TestFourcMaterialParameters(unittest.TestCase):
                 self.fail(msg)
             else:
                 print("\n[WARN catalog drift]\n" + msg, file=sys.stderr)
+
+
+# ── scikit-fem ───────────────────────────────────────────────────────────────
+
+
+_SKFEM_ELEMENT_RE = re.compile(r"\bElement[A-Z]\w*\b")
+_SKFEM_MESH_RE = re.compile(r"\bMesh[A-Z]\w*\b")
+
+
+def _collect_skfem_class_mentions() -> dict[str, set[str]]:
+    """Walk every string value reachable under
+    ``backends.skfem.generators.KNOWLEDGE`` and pull out all ``Element*``
+    and ``Mesh*`` identifiers referenced by name.  These are the names the
+    agent sees when it asks the MCP for guidance, so each one must be a
+    real class on the installed ``skfem`` module.
+
+    Returns ``{"Element": set, "Mesh": set}``.
+    """
+    from backends.skfem.generators import KNOWLEDGE
+
+    def walk(obj, into: set[str], regex: re.Pattern[str]) -> None:
+        if isinstance(obj, str):
+            into.update(regex.findall(obj))
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                walk(v, into, regex)
+        elif isinstance(obj, (list, tuple, set)):
+            for v in obj:
+                walk(v, into, regex)
+
+    elements: set[str] = set()
+    meshes: set[str] = set()
+    walk(KNOWLEDGE, elements, _SKFEM_ELEMENT_RE)
+    walk(KNOWLEDGE, meshes, _SKFEM_MESH_RE)
+    return {"Element": elements, "Mesh": meshes}
+
+
+class TestSkfemElementMeshClasses(unittest.TestCase):
+    """Every ``Element*`` / ``Mesh*`` name the scikit-fem catalog mentions
+    must be an actual class on the installed ``skfem`` package.
+
+    This closes the same catalog-vs-source loop that
+    ``TestFourcMaterialParameters`` does for 4C, but via Python
+    introspection rather than C++ source-grep -- demonstrating the second
+    probe family described in ``tests/groundtruth/__init__.py``.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.source_elements = skfem_gt.element_classes()
+        cls.source_meshes = skfem_gt.mesh_classes()
+        if cls.source_elements is None or cls.source_meshes is None:
+            raise unittest.SkipTest(
+                "scikit-fem not installed (pip install scikit-fem)"
+            )
+        cls.mentions = _collect_skfem_class_mentions()
+
+    def test_no_unknown_element_class_in_knowledge(self):
+        promised = self.mentions["Element"]
+        unknown = promised - self.source_elements
+        self.assertFalse(
+            unknown,
+            f"\nscikit-fem catalog references Element* classes that do "
+            f"not exist on `skfem`: {sorted(unknown)}\n"
+            f"Typo or recent rename.  Available: "
+            f"{sorted(self.source_elements)[:10]}... "
+            f"({len(self.source_elements)} total)",
+        )
+
+    def test_no_unknown_mesh_class_in_knowledge(self):
+        promised = self.mentions["Mesh"]
+        unknown = promised - self.source_meshes
+        self.assertFalse(
+            unknown,
+            f"\nscikit-fem catalog references Mesh* classes that do "
+            f"not exist on `skfem`: {sorted(unknown)}\n"
+            f"Available: {sorted(self.source_meshes)}",
+        )
 
 
 if __name__ == "__main__":
