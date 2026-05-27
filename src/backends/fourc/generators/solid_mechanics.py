@@ -97,6 +97,14 @@ class SolidMechanicsGenerator(BaseGenerator):
                             "description": "List of sub-material IDs referencing ELAST_CoupNeoHooke",
                             "range": "[<id>]",
                         },
+                        "POLYCONVEX": {
+                            "description": (
+                                "MAT_ElastHyper wrapper flag: enable a runtime "
+                                "polyconvexity check on the strain-energy "
+                                "function (0 = off, 1 = on)."
+                            ),
+                            "range": "0 | 1",
+                        },
                     },
                 },
                 "MAT_Struct_PlasticNlnLogNeoHooke": {
@@ -129,6 +137,36 @@ class SolidMechanicsGenerator(BaseGenerator):
                         "HARDEXPO": {
                             "description": "Hardening exponent delta (controls rate of saturation)",
                             "range": "> 0",
+                        },
+                        "ISOHARD": {
+                            "description": "Linear isotropic hardening modulus added on top of the Voce saturation law.",
+                            "range": ">= 0",
+                        },
+                        "VISC": {
+                            "description": (
+                                "Perzyna-type viscoplastic viscosity eta.  "
+                                "Set 0 for rate-independent plasticity."
+                            ),
+                            "range": ">= 0",
+                        },
+                        "RATE_DEPENDENCY": {
+                            "description": (
+                                "Perzyna rate exponent n.  Ignored when VISC = 0."
+                            ),
+                            "range": "> 0",
+                        },
+                        "TOL": {
+                            "description": "Local return-mapping convergence tolerance.",
+                            "range": "typical 1e-10",
+                        },
+                        "HARDENING_FUNC": {
+                            "description": (
+                                "ID of a user-defined hardening function in the "
+                                "FUNCT section.  Set 0 to use the analytic "
+                                "Voce+linear law parameterised by YIELD / "
+                                "SATHARDENING / HARDEXPO / ISOHARD."
+                            ),
+                            "range": ">= 0",
                         },
                     },
                 },
@@ -183,8 +221,12 @@ class SolidMechanicsGenerator(BaseGenerator):
                     "kinematics": "linear only",
                 },
                 "MAT_Struct_DruckerPrager": {
-                    "description": "Small-strain Drucker-Prager (pressure-dependent, smooth cone)",
-                    "parameters": "YOUNG, NUE, DENS, ISOHARD, TOL, C (cohesion), ETA, XI, ETABAR, TANG, MAXITER",
+                    "description": (
+                        "Small-strain Drucker-Prager (pressure-dependent, smooth cone). "
+                        "C is the cohesion parameter; ETA/XI/ETABAR are pre-computed "
+                        "from friction phi and dilatancy psi -- see eta_xi_formulas."
+                    ),
+                    "parameters": "YOUNG, NUE, DENS, ISOHARD, TOL, C, ETA, XI, ETABAR, TANG, MAXITER",
                     "kinematics": "linear only",
                     "eta_xi_formulas": (
                         "For outer cone (circumscribed, matches MC at compression meridian): "
@@ -197,14 +239,29 @@ class SolidMechanicsGenerator(BaseGenerator):
                     ),
                 },
                 "MAT_PlasticElastHyper": {
-                    "description": "Finite-strain J2/Hill with nonlinear isotropic+kinematic hardening, viscoplasticity",
-                    "parameters": "YOUNG, NUE, DENS, YIELD, ISOHARD, KINHARD, Infyield, Hexp, eta (viscosity)",
+                    "description": (
+                        "Finite-strain J2/Hill with nonlinear isotropic+kinematic hardening, "
+                        "Perzyna viscoplasticity, optional thermal softening.  Wraps an "
+                        "ELAST_* hyperelastic sub-material; elastic moduli (YOUNG/NUE) "
+                        "live in that sub-material, not on this wrapper."
+                    ),
+                    "parameters": (
+                        "INITYIELD, ISOHARD, KINHARD, EXPISOHARD, INFYIELD, VISC, "
+                        "RATE_DEPENDENCY, VISC_SOFT, YIELDSOFT, HARDSOFT, "
+                        "CTE, INITTEMP, TAYLOR_QUINNEY, PL_SPIN_CHI"
+                    ),
                     "kinematics": "nonlinear",
                     "features": "Hill anisotropy, Perzyna viscoplasticity, thermal softening (TSI)",
                 },
                 "MAT_Struct_PlasticGTN": {
-                    "description": "Gurson-Tvergaard-Needleman ductile damage with void growth",
-                    "parameters": "YOUNG, NUE, YIELD, ISOHARD, f0, fn, sn, en, fc, kappa, k1, k2, k3",
+                    "description": (
+                        "Gurson-Tvergaard-Needleman ductile damage with void growth, "
+                        "nucleation and coalescence (KINEM: linear only in current 4C release)."
+                    ),
+                    "parameters": (
+                        "YOUNG, NUE, DENS, YIELD, ISOHARD, HARDENING_FUNC, "
+                        "F0, FN, SN, EN, FC, KAPPA, EF, K1, K2, K3, MAXITER, TOL"
+                    ),
                     "kinematics": "linear only",
                 },
                 "MAT_crystal_plasticity": {
