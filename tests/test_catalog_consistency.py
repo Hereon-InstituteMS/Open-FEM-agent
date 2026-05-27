@@ -213,11 +213,13 @@ class TestFourcMaterialParameters(unittest.TestCase):
         strict = os.environ.get("OFA_STRICT_CATALOG") == "1"
         missing: list[str] = []
         for mat_name, cat_keys in self.catalog.items():
-            if not cat_keys:
-                continue
             allowed = _allowed_keys_for(mat_name, self.source)
             if allowed is None:
-                continue
+                continue  # no source mapping for this entry; cannot compare
+            # Note: we intentionally do NOT skip entries with empty
+            # cat_keys here -- a catalog entry that promises a material
+            # but lists no parameters is itself an under-declaration the
+            # agent needs to know about.
             gap = allowed - cat_keys
             if gap:
                 missing.append(
