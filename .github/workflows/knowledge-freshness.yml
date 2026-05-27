@@ -8,9 +8,55 @@ on:
       - 'data/**'
       - 'src/tools/deep_knowledge.py'
       - 'src/backends/*/backend.py'
+  pull_request:
+    paths:
+      - 'src/backends/**'
+      - 'src/tools/deep_knowledge.py'
+      - 'tests/groundtruth/**'
+      - 'tests/test_catalog_consistency.py'
   workflow_dispatch:  # Manual trigger
 
 jobs:
+  catalog-consistency:
+    # Lightweight: greps backend source for the canonical names the catalog
+    # promises (currently 4C only; extension pattern in tests/groundtruth/).
+    # Always runs (PR + push + cron) -- network-only, no solver installs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run catalog-consistency tests
+        run: pytest tests/test_catalog_consistency.py -v -s
+        continue-on-error: true
+        id: catalog
+
+      - name: Create issue on catalog drift
+        # Only auto-file an issue on scheduled runs.  PR failures are
+        # surfaced through the PR's status check already.
+        if: steps.catalog.outcome == 'failure' && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const output = execSync(
+              'pytest tests/test_catalog_consistency.py -v -s 2>&1 || true'
+            ).toString();
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Catalog/source drift detected',
+              body: `Weekly catalog-consistency check failed:\n\n\`\`\`\n${output.slice(-6000)}\n\`\`\`\n\nA backend source change has broken the MCP catalog.  Edit the catalog so its parameter keys / DYNAMICTYPE strings / etc. match what the input parser now accepts.`,
+              labels: ['knowledge-drift'],
+            });
+
   fingerprint:
     runs-on: ubuntu-latest
     steps:
