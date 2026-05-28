@@ -93,25 +93,33 @@ def _list_applications_network() -> list[str] | None:
 
 
 def application_names() -> set[str] | None:
-    """Set of valid ``Kratos<Name>Application`` strings as the catalog
-    references them.  Returns ``None`` when the directory listing is
-    unobtainable (no $KRATOS_ROOT and no network).
+    """Set of valid bare ``<Name>Application`` strings, one per
+    upstream ``applications/<Name>Application/`` directory.
 
-    Mapping: each ``<Name>Application`` directory in the upstream
-    repo becomes ``Kratos<Name>Application`` in the catalog; the
-    set returned here is already pre-prefixed for direct subset
-    comparison with the catalog scan.
+    Catalog mentions appear in two forms and BOTH map to this set
+    after normalising:
+
+    * ``import KratosMultiphysics.<Name>Application as ...`` -- the
+      actual import path the agent's generated code executes.  This
+      is the load-bearing form: if ``<Name>Application`` isn't a
+      real upstream directory, the import fails at runtime.
+    * ``Kratos<Name>Application`` -- used in pip install hints and
+      prose lists.  Maps to the same bare ``<Name>Application``
+      after stripping the ``Kratos`` prefix.
+
+    Returning bare names lets the test scanner normalise both forms
+    before comparing.
     """
     local = _list_applications_local()
     if local is not None:
-        return {f"Kratos{name}" for name in local}
+        return set(local)
     cached = _list_applications_cached()
     if cached is not None:
-        return {f"Kratos{name}" for name in cached}
+        return set(cached)
     fetched = _list_applications_network()
     if fetched is None:
         return None
     cached_path = _CACHE_DIR / _BRANCH / "_listing_applications.json"
     cached_path.parent.mkdir(parents=True, exist_ok=True)
     cached_path.write_text(json.dumps(fetched))
-    return {f"Kratos{name}" for name in fetched}
+    return set(fetched)

@@ -526,17 +526,31 @@ class TestNgsolveAttributes(unittest.TestCase):
 # ── Kratos ───────────────────────────────────────────────────────────────────
 
 
-_KRATOS_APP_RE = re.compile(r"\bKratos[A-Z][A-Za-z0-9]*Application\b")
+# Two catalog forms collapse to one bare ``<Name>Application`` name:
+#   * ``KratosMultiphysics.<Name>Application``  -- the actual import path
+#     the agent's generated code executes.  This is load-bearing: a typo
+#     here makes the generated script crash with ``ModuleNotFoundError``.
+#   * ``Kratos<Name>Application``               -- pip install hints and
+#     prose lists.  Maps to the same bare name after stripping ``Kratos``.
+_KRATOS_IMPORT_RE = re.compile(
+    r"\bKratosMultiphysics\.([A-Z][A-Za-z0-9]*Application)\b"
+)
+_KRATOS_PREFIXED_RE = re.compile(
+    r"\bKratos([A-Z][A-Za-z0-9]*Application)\b"
+)
 
 
 def _collect_kratos_application_mentions() -> set[str]:
-    """Return every ``Kratos<Name>Application`` identifier referenced
-    anywhere the Kratos catalog touches.
+    """Return every bare ``<Name>Application`` identifier referenced
+    anywhere the Kratos catalog touches, normalising both the
+    ``KratosMultiphysics.<Name>Application`` import form and the
+    ``Kratos<Name>Application`` pip-install form.
 
     Scans the Kratos backend package recursively and the cross-cutting
-    ``src/tools/deep_knowledge.py``.  The agent emits these names
-    verbatim as imports (``import KratosFluidDynamicsApplication``)
-    so every mention must correspond to a real Kratos application.
+    ``src/tools/deep_knowledge.py``.  Each match is captured as the
+    bare ``<Name>Application`` (no ``Kratos`` prefix) -- the form
+    the upstream ``applications/`` directory listing uses, so the
+    subset check is a direct set comparison.
     """
     out: set[str] = set()
     repo_src = Path(__file__).parent.parent / "src"
@@ -548,24 +562,27 @@ def _collect_kratos_application_mentions() -> set[str]:
     if deep_knowledge.is_file():
         paths.append(deep_knowledge)
     for py in paths:
-        out.update(
-            _KRATOS_APP_RE.findall(
-                py.read_text(encoding="utf-8", errors="replace")
-            )
-        )
+        text = py.read_text(encoding="utf-8", errors="replace")
+        out.update(_KRATOS_IMPORT_RE.findall(text))
+        out.update(_KRATOS_PREFIXED_RE.findall(text))
     return out
 
 
 class TestKratosApplications(unittest.TestCase):
-    """Every ``Kratos<Name>Application`` the catalog mentions must be
-    a real sub-application of Kratos -- i.e. correspond to a directory
-    under ``applications/`` in the KratosMultiphysics/Kratos repo.
+    """Every Kratos application the catalog mentions must be a real
+    sub-application of Kratos -- i.e. correspond to a directory under
+    ``applications/`` in the KratosMultiphysics/Kratos repo.
 
     Probe is source-enumeration: lists the GitHub contents API for the
-    upstream ``applications/`` directory and pre-prefixes each entry
-    with ``Kratos`` for direct subset comparison.  No Kratos install
-    needed -- the probe is purely a directory listing, so the test
-    works in any CI environment that has network access.
+    upstream ``applications/`` directory.  No Kratos install needed --
+    the probe is purely a directory listing, so the test works in any
+    CI environment that has network access.
+
+    Mentions are matched in BOTH catalog conventions:
+    ``KratosMultiphysics.<Name>Application`` (the agent's actual
+    import path) and ``Kratos<Name>Application`` (pip install
+    hints, prose lists); each is normalised to the bare
+    ``<Name>Application`` form before the subset check.
     """
 
     @classmethod
@@ -574,7 +591,10 @@ class TestKratosApplications(unittest.TestCase):
         if cls.source is None:
             raise unittest.SkipTest(
                 "Kratos applications listing unavailable "
-                "(set KRATOS_ROOT or enable network access)"
+                "(set KRATOS_ROOT to an upstream git checkout, "
+                "or enable network access -- a pip install of "
+                "KratosMultiphysics is NOT a substitute since the "
+                "probe needs the applications/ directory listing)"
             )
         cls.mentions = _collect_kratos_application_mentions()
 
@@ -587,6 +607,27 @@ class TestKratosApplications(unittest.TestCase):
             f"Upstream has {len(self.source)} applications. "
             f"First 10: {sorted(self.source)[:10]}",
         )
+
+    def test_under_declared_applications(self):
+        """Soft check: applications that exist upstream but are never
+        mentioned by the catalog.  Each unmentioned application is a
+        capability the agent will never propose.  Mirrors the deal.II
+        soft-warning test: stderr-print by default, hard-fail only
+        when ``OFA_STRICT_CATALOG=1`` is set.
+        """
+        import os
+
+        strict = os.environ.get("OFA_STRICT_CATALOG") == "1"
+        gap = self.source - self.mentions
+        if gap:
+            msg = (
+                f"Kratos catalog under-declares applications "
+                f"({len(gap)} unmentioned of {len(self.source)} upstream): "
+                f"{sorted(gap)}"
+            )
+            if strict:
+                self.fail(msg)
+            print(f"\n[WARN catalog drift]\n{msg}", file=sys.stderr)
 
 
 if __name__ == "__main__":
