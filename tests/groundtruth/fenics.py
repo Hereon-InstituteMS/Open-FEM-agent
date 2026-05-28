@@ -27,46 +27,46 @@ import importlib
 
 
 def has_attr(dotted_path: str) -> bool | None:
-    """Return ``True``/``False`` if the dotted-path attribute can be
+    """Return ``True`` / ``False`` if the dotted-path attribute can be
     resolved on the installed ``dolfinx`` package; return ``None``
     when ``dolfinx`` is not importable at all so the caller can
-    distinguish "missing attribute" from "module unavailable".
+    distinguish "missing attribute" from "package missing".
+
+    Walks the dotted path one segment at a time.  ``getattr`` on a
+    parent package only sees submodules that have been imported by
+    the parent's ``__init__`` -- and dolfinx deliberately does NOT
+    side-import every submodule (notably ``dolfinx.fem.petsc`` is
+    only available after ``import dolfinx.fem.petsc``).  When
+    ``getattr`` raises ``AttributeError`` we therefore try
+    ``importlib.import_module`` on the same path before giving up;
+    this catches the petsc case and any other lazy-loaded submodule.
 
     Example::
 
-        has_attr("dolfinx.mesh.create_rectangle")  # True / False / None
-        has_attr("dolfinx.fem.petsc.LinearProblem")
+        has_attr("dolfinx.mesh.create_rectangle")    # True / False / None
+        has_attr("dolfinx.fem.petsc.LinearProblem")  # True when petsc-enabled
     """
     parts = dotted_path.split(".")
     if not parts or parts[0] != "dolfinx":
-        # The function is dolfinx-specific; refuse to evaluate
-        # anything else so the caller doesn't accidentally pass an
-        # arbitrary path and get a misleading True.
+        # Dolfinx-specific; refuse other roots so callers don't
+        # accidentally pass an arbitrary path and get a misleading True.
         return None
     try:
-        importlib.import_module("dolfinx")
+        obj: object = importlib.import_module("dolfinx")
     except ImportError:
         return None
-    # Walk the path; promote missing submodule imports to AttributeError
-    # so the answer is uniformly bool from here down.
-    obj: object | None = None
-    module_path = parts[0]
-    obj = importlib.import_module(module_path)
+    module_path = "dolfinx"
     for segment in parts[1:]:
+        next_path = f"{module_path}.{segment}"
         try:
             obj = getattr(obj, segment)
         except AttributeError:
-            return False
-        # If the segment is itself a submodule it may not have been
-        # imported yet; try the import explicitly.
-        if obj is None or (not callable(obj) and not hasattr(obj, "__dict__")):
+            # Lazy-loaded submodule: try importing it explicitly.
             try:
-                obj = importlib.import_module(f"{module_path}.{segment}")
-                module_path = f"{module_path}.{segment}"
+                obj = importlib.import_module(next_path)
             except ImportError:
                 return False
-        else:
-            module_path = f"{module_path}.{segment}"
+        module_path = next_path
     return True
 
 
@@ -79,10 +79,19 @@ def is_available() -> bool:
     return True
 
 
-# Canonical API map -- the catalog promises these dotted paths exist.
-# Sourced from `scripts/fingerprint_solvers.py::fingerprint_fenics`
-# so both modules stay in sync.  Extend when the catalog adds new
-# references.
+# Hand-curated list of dotted paths the catalog mentions in template
+# code and structured knowledge.  These are checked in addition to
+# whatever the live source scan picks up, so a path that the catalog
+# DOES use but that our regex happens to miss (broken across lines,
+# embedded in a docstring fragment, etc.) is still verified.
+#
+# Partially overlaps with
+# ``scripts/fingerprint_solvers.py::fingerprint_fenics`` (~9 entries
+# in common); intentionally extends it because the catalog references
+# a few names the fingerprint script does not (``create_unit_square``
+# / ``create_unit_cube`` / ``locate_dofs_*`` / ``NonlinearProblem``).
+# When the two lists drift, update both; there is no programmatic
+# single source of truth.
 CATALOG_API_PATHS: tuple[str, ...] = (
     "dolfinx.mesh.create_rectangle",
     "dolfinx.mesh.create_box",
