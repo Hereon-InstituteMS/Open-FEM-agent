@@ -23,60 +23,30 @@ test can reuse the same API map.
 
 from __future__ import annotations
 
-import importlib
+from tests.groundtruth._introspect import is_importable, resolve_dotted_path
 
 
 def has_attr(dotted_path: str) -> bool | None:
     """Return ``True`` / ``False`` if the dotted-path attribute can be
     resolved on the installed ``dolfinx`` package; return ``None``
-    when ``dolfinx`` is not importable at all so the caller can
-    distinguish "missing attribute" from "package missing".
+    when ``dolfinx`` is not importable or the path is not rooted at
+    ``dolfinx``.
 
-    Walks the dotted path one segment at a time.  ``getattr`` on a
-    parent package only sees submodules that have been imported by
-    the parent's ``__init__`` -- and dolfinx deliberately does NOT
-    side-import every submodule (notably ``dolfinx.fem.petsc`` is
-    only available after ``import dolfinx.fem.petsc``).  When
-    ``getattr`` raises ``AttributeError`` we therefore try
-    ``importlib.import_module`` on the same path before giving up;
-    this catches the petsc case and any other lazy-loaded submodule.
+    Handles dolfinx's lazy submodule loading (``dolfinx.fem.petsc`` is
+    only available after an explicit import) -- see
+    ``_introspect.resolve_dotted_path`` for the walk strategy.
 
     Example::
 
         has_attr("dolfinx.mesh.create_rectangle")    # True / False / None
         has_attr("dolfinx.fem.petsc.LinearProblem")  # True when petsc-enabled
     """
-    parts = dotted_path.split(".")
-    if not parts or parts[0] != "dolfinx":
-        # Dolfinx-specific; refuse other roots so callers don't
-        # accidentally pass an arbitrary path and get a misleading True.
-        return None
-    try:
-        obj: object = importlib.import_module("dolfinx")
-    except ImportError:
-        return None
-    module_path = "dolfinx"
-    for segment in parts[1:]:
-        next_path = f"{module_path}.{segment}"
-        try:
-            obj = getattr(obj, segment)
-        except AttributeError:
-            # Lazy-loaded submodule: try importing it explicitly.
-            try:
-                obj = importlib.import_module(next_path)
-            except ImportError:
-                return False
-        module_path = next_path
-    return True
+    return resolve_dotted_path(dotted_path, "dolfinx")
 
 
 def is_available() -> bool:
     """``True`` if ``dolfinx`` is importable in the current environment."""
-    try:
-        importlib.import_module("dolfinx")
-    except ImportError:
-        return False
-    return True
+    return is_importable("dolfinx")
 
 
 # Hand-curated list of dotted paths the catalog mentions in template

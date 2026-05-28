@@ -40,9 +40,9 @@ from __future__ import annotations
 # Kratos install and would extend ``kratos.py`` or follow its pattern.
 
 
-# ── DUNE-fem (Python + C++) ───────────────────────────────────────────────
-def dune_grid_implementations() -> None:
-    return None
+# DUNE-fem -- implemented in ``dune.py`` (Python introspection via importlib
+# dotted-path walk, shared with the FEniCSx probe through ``_introspect``).
+# Test skips when ``dune`` is not importable (it builds C++ deps from source).
 
 
 # ── FEBio (XML schema) ────────────────────────────────────────────────────
