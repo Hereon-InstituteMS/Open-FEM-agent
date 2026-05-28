@@ -742,8 +742,9 @@ class TestFenicsDolfinxAPIPaths(unittest.TestCase):
 # ── DUNE-fem ─────────────────────────────────────────────────────────────────
 
 
-# Match ``dune.<path>`` dotted references of any depth.  The negative
-# follow ``(?![\w])`` ensures we capture the full dotted run.
+# Match ``dune.<path>`` dotted references of any depth.  The trailing
+# ``\b`` plus the greedy ``(?:\.…)+`` group captures the full dotted
+# run (e.g. ``dune.grid.reader.gmsh``) rather than stopping early.
 _DUNE_DOTTED_RE = re.compile(r"\bdune(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b")
 
 
