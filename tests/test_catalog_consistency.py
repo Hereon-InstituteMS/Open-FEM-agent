@@ -455,9 +455,16 @@ _NGSOLVE_CORE_IDENTIFIERS: tuple[str, ...] = (
 
 def _collect_ngsolve_mentions() -> set[str]:
     """Return the subset of ``_NGSOLVE_CORE_IDENTIFIERS`` actually
-    referenced in any ngsolve generator template.  We scan the raw
-    .py source for word-boundary matches; the catalog mention set is
-    the intersection of "in the templates" and "on the watchlist".
+    referenced anywhere in the ngsolve generator package.
+
+    Scans the raw .py source for word-boundary matches.  That source
+    contains both executable template strings (which the agent runs)
+    and KNOWLEDGE-block prose / pitfall text (which it does not).
+    A name appearing only in prose still counts as a "mention" here
+    -- benign for the subset test because the same name's presence
+    on ``dir(ngsolve)`` is verified either way, but worth knowing
+    when reading the assertion message: an "unknown" entry could
+    come from prose just as easily as from generated code.
     """
     out: set[str] = set()
     ngs_dir = Path(__file__).parent.parent / "src" / "backends" / "ngsolve" / "generators"
