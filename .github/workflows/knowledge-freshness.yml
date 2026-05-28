@@ -21,6 +21,17 @@ on:
       - '.github/workflows/knowledge-freshness.yml'
   workflow_dispatch:  # Manual trigger
 
+# Both drift jobs auto-file a GitHub issue on the weekly cron when the
+# catalog/fingerprint goes stale.  ``issues.create`` needs ``issues:
+# write``; the repo's default GITHUB_TOKEN permission is read-only, so
+# without this block the issue step 403s -- a failure that only shows
+# up the first time real drift is detected (verified by a one-off
+# dispatch run that confirmed the issue is created with this grant in
+# place).  ``contents: read`` is all the checkout needs.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   catalog-consistency:
     # Lightweight: greps backend source for the canonical names the catalog
