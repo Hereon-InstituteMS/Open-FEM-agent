@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from tests.groundtruth import dealii as dealii_gt  # noqa: E402
+from tests.groundtruth import dune as dune_gt  # noqa: E402
 from tests.groundtruth import fenics as fenics_gt  # noqa: E402
 from tests.groundtruth import fourc as fourc_gt  # noqa: E402
 from tests.groundtruth import kratos as kratos_gt  # noqa: E402
@@ -735,6 +736,71 @@ class TestFenicsDolfinxAPIPaths(unittest.TestCase):
             f"resolve on the installed package: {unresolved}\n"
             f"Likely an upstream rename or a build that omitted the "
             f"submodule (e.g. petsc-less dolfinx).",
+        )
+
+
+# ── DUNE-fem ─────────────────────────────────────────────────────────────────
+
+
+# Match ``dune.<path>`` dotted references of any depth.  The trailing
+# ``\b`` plus the greedy ``(?:\.…)+`` group captures the full dotted
+# run (e.g. ``dune.grid.reader.gmsh``) rather than stopping early.
+_DUNE_DOTTED_RE = re.compile(r"\bdune(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b")
+
+
+def _collect_dune_path_mentions() -> set[str]:
+    """Return every ``dune.<path>...`` dotted identifier referenced in
+    any DUNE-fem generator file under ``src/backends/dune/``.
+
+    Scoped to the backend's own generators (template code the agent
+    executes).  Like the FEniCSx scan, the cross-cutting
+    ``deep_knowledge.py`` is intentionally excluded -- it can carry
+    version-historical names that don't all resolve against one
+    DUNE release.
+    """
+    out: set[str] = set()
+    dune_dir = Path(__file__).parent.parent / "src" / "backends" / "dune"
+    if dune_dir.is_dir():
+        for py in dune_dir.rglob("*.py"):
+            out.update(
+                _DUNE_DOTTED_RE.findall(
+                    py.read_text(encoding="utf-8", errors="replace")
+                )
+            )
+    return out
+
+
+class TestDuneFemAPIPaths(unittest.TestCase):
+    """Every ``dune.<path>`` dotted reference the DUNE-fem catalog uses
+    must resolve on the installed ``dune`` package.
+
+    Skipped when ``dune`` is not importable -- DUNE-fem builds C++
+    modules (``dune-alugrid`` etc.) from source and is not cleanly
+    pip-installable, so a vanilla venv / CI runner skips.  Runs for
+    real wherever a built DUNE-fem is available.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not dune_gt.is_available():
+            raise unittest.SkipTest(
+                "dune not importable -- DUNE-fem builds C++ deps from "
+                "source and is not cleanly pip-installable."
+            )
+        cls.checked = (
+            _collect_dune_path_mentions() | set(dune_gt.CATALOG_API_PATHS)
+        )
+
+    def test_no_unresolved_dune_path(self):
+        unresolved = [
+            path for path in sorted(self.checked)
+            if dune_gt.has_attr(path) is False
+        ]
+        self.assertFalse(
+            unresolved,
+            f"\nDUNE-fem catalog references dune paths that do not "
+            f"resolve on the installed package: {unresolved}\n"
+            f"Likely an upstream rename or a build missing the module.",
         )
 
 
