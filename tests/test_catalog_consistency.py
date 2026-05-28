@@ -657,25 +657,29 @@ _DOLFINX_DOTTED_RE = re.compile(r"\bdolfinx(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b")
 
 def _collect_dolfinx_path_mentions() -> set[str]:
     """Return every ``dolfinx.<path>...`` dotted identifier referenced
-    in any FEniCSx generator file or in the cross-cutting deep-
-    knowledge module.  Identifiers are kept as their raw dotted
-    form so the test can resolve each via ``has_attr``.
+    in any FEniCSx generator file under ``src/backends/fenics/``.
+
+    Deliberately excludes ``src/tools/deep_knowledge.py`` because its
+    ``_FENICS_KNOWLEDGE`` block contains an ``api_changes`` section
+    listing OLD-vs-NEW dolfinx names side by side
+    (``dolfinx.io.gmsh.model_to_mesh`` and the current
+    ``dolfinx.io.gmshio.model_to_mesh``, etc.).  Those historical
+    names are not all simultaneously present in any given dolfinx
+    version, so a scan that includes them would falsely fail the
+    test.  The catalog files under ``src/backends/fenics/`` only
+    contain template code the agent actually executes, so paths
+    there must resolve at runtime.
     """
     out: set[str] = set()
     repo_src = Path(__file__).parent.parent / "src"
-    paths: list[Path] = []
     fenics_dir = repo_src / "backends" / "fenics"
     if fenics_dir.is_dir():
-        paths.extend(fenics_dir.rglob("*.py"))
-    deep_knowledge = repo_src / "tools" / "deep_knowledge.py"
-    if deep_knowledge.is_file():
-        paths.append(deep_knowledge)
-    for py in paths:
-        out.update(
-            _DOLFINX_DOTTED_RE.findall(
-                py.read_text(encoding="utf-8", errors="replace")
+        for py in fenics_dir.rglob("*.py"):
+            out.update(
+                _DOLFINX_DOTTED_RE.findall(
+                    py.read_text(encoding="utf-8", errors="replace")
+                )
             )
-        )
     return out
 
 
