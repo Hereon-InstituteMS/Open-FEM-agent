@@ -16,10 +16,8 @@ rather than fails in environments without it.
 
 from __future__ import annotations
 
-from typing import Set
 
-
-def public_attrs() -> Set[str] | None:
+def public_attrs() -> set[str] | None:
     """Public attribute names on the top-level ``ngsolve`` module.
 
     Returns ``None`` if NGSolve is not installed.  The returned set

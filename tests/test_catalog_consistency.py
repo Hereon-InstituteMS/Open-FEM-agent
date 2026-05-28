@@ -429,17 +429,25 @@ class TestDealiiFiniteElementClasses(unittest.TestCase):
 # the ngsolve API.  Anything not in the list is simply skipped --
 # wrong-name typos for already-listed names are still caught.
 _NGSOLVE_CORE_IDENTIFIERS: tuple[str, ...] = (
-    # FE spaces
+    # FE spaces (vector / scalar / specialised)
     "H1", "HCurl", "HDiv", "L2", "NumberSpace",
     "VectorH1", "VectorL2", "FESpace", "Compress",
-    # Mesh + geometry primitives reachable via `from ngsolve import *`
+    "FacetFESpace", "HCurlCurl", "HDivDiv", "SurfaceL2",
+    "Discontinuous", "Periodic",
+    # Mesh
     "Mesh",
     # Forms and the solver pipeline
     "BilinearForm", "LinearForm", "GridFunction",
-    # Operators / integrators
+    "SymbolicEnergy", "Variation",
+    # Operators / integrators / functional ops
     "Integrate", "InnerProduct", "grad", "div", "curl",
+    "Grad", "Trace", "Norm", "Det", "Inv", "Id", "MatrixValued",
+    "IfPos",
+    # Linear algebra / solvers
+    "BlockMatrix", "Matrix", "Vector", "ArnoldiSolver", "Solve",
+    "HCurlAMG", "TaskManager",
     # Coefficient handling and IO
-    "CoefficientFunction", "Parameter", "VTKOutput",
+    "CoefficientFunction", "Parameter", "VTKOutput", "Draw",
     # Boundary / volume markers
     "VOL", "BND", "BBND",
 )
