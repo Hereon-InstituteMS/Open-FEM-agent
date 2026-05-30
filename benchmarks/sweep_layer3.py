@@ -15,7 +15,11 @@ exists on disk):
     FOURC_ROOT      Source root for FOURC (some templates depend on it)
 
 Run:
-    python benchmarks/sweep_layer3.py [--only POISSON,ELASTICITY]
+    python benchmarks/sweep_layer3.py [--only POISSON]
+
+`--only` accepts a comma-separated list of row names that exist in
+`MATRIX` below.  Additional physics rows are added in follow-up PRs;
+keep this docstring in sync with the actual matrix.
 """
 
 from __future__ import annotations
@@ -138,9 +142,9 @@ class CellResult:
 # Reference problem per row:
 #
 #   POISSON           -Δu = 1 on [0,1]², u = 0 on ∂Ω.  max(u) ≈ 0.0737.
-#   ELASTICITY        Cantilever beam under tip load — sign + order check.
 #
-# More rows can be added; sweep accepts --only to filter.
+# More rows (elasticity, heat, stokes, …) are added in follow-up PRs.
+# Sweep accepts --only to filter to a comma-separated subset.
 
 _KAPPA = 1.0
 
@@ -154,18 +158,27 @@ MATRIX: dict[str, list[Cell]] = {
              field="phi", expected=0.0737, rtol=0.05),
         Cell("fenics",  "poisson", "2d",         {"kappa": _KAPPA, "nx": 32, "ny": 32},
              field="u", expected=0.0737, rtol=0.05),
-        # Kratos `poisson_2d` is a known-fake scipy stub — see F-013 in
-        # ~/.claude/memory.  The backend's validate_input correctly rejects
-        # it; kept here as documentation of the catalog drift.
+        # Kratos's `poisson_2d` template is a scipy-only stub: it does not
+        # import KratosMultiphysics and runs a hand-rolled scipy.sparse
+        # solve instead of touching Kratos at all.  The backend's
+        # validate_input rule "Script should import KratosMultiphysics"
+        # correctly rejects it.  The cell is kept here so that catalog
+        # drift is visible in every sweep run; replacing the template
+        # with a real KratosConvectionDiffusionApplication template is
+        # tracked separately.
         Cell("kratos",  "poisson", "2d",         {"kappa": _KAPPA, "nx": 32, "ny": 32},
              field="TEMPERATURE", expected=0.0737, rtol=0.05),
-        # deal.II 9.1.1 in the conda-forge ofa-dealii env requires the
-        # legacy tbb/task.h header which was removed in TBB 2020.x — see
-        # F-014.  Conda only ships dealii up to 9.3.2 against python<=3.10,
-        # and ofa-dealii is pinned to 3.12.  Needs a separate env to fix.
-        # deal.II's Poisson template writes the result vector as "solution"
-        # (data_out.add_data_vector(solution, "solution") in the generated
-        # main.cpp), so the expected field name here is "solution", not "u".
+        # deal.II 9.1.1 (the version conda-forge ships against python>=3.12)
+        # requires the legacy <tbb/task.h> header that was removed in TBB
+        # 2020.x; on this machine the conda env supplies TBB 2020.2, so
+        # the build of the generated main.cpp fails.  conda-forge's next
+        # deal.II (9.3.2) is built against oneTBB but pins python<=3.10
+        # and is not co-installable with the current python 3.12 env.
+        # The cell stays in the matrix so the gap is visible; resolving
+        # it needs a parallel env or a source build of deal.II.
+        # NB the deal.II Poisson template writes the result vector as
+        # "solution" (data_out.add_data_vector(solution, "solution")), so
+        # the expected field name is "solution", not "u".
         Cell("dealii",  "poisson", "2d",         {"refinements": 5},
              field="solution", expected=0.0737, rtol=0.05),
         Cell("fourc",   "poisson", "poisson_2d", {},
@@ -323,7 +336,8 @@ def cell_result_to_dict(r: CellResult) -> dict:
 async def main():
     p = argparse.ArgumentParser()
     p.add_argument("--only", default="",
-                   help="comma-separated row names (POISSON,ELASTICITY,...)")
+                   help="comma-separated row names to run "
+                        "(must exist in MATRIX; e.g. POISSON)")
     args = p.parse_args()
 
     _discover_env()  # mutate os.environ here, not at module-import time
