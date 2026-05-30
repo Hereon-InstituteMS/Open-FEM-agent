@@ -417,21 +417,33 @@ def _generate_cmakelists(target_name: str) -> str:
         if not extra_hints and Path(dealii_root).is_dir():
             extra_hints = f" {dealii_root}"
 
-    # Honour CC/CXX from the environment, both as a cache override so that
-    # conda-forge deal.II packages (whose deal.IIConfig.cmake bakes in a
-    # feedstock-only compiler path like
+    # Honour CC/CXX from the environment so that conda-forge deal.II
+    # packages (whose deal.IIConfig.cmake bakes in a feedstock-only
+    # compiler path like
     # /home/conda/feedstock_root/build_artifacts/.../x86_64-conda_cos6-linux-...)
-    # do not force the build to use a non-existent toolchain.
+    # do not force the build to use a non-existent toolchain when
+    # `deal_ii_initialize_cached_variables()` runs (that macro
+    # unconditionally writes the cache without FORCE, so any pre-seeded
+    # cache entry wins).
+    #
+    # Pre-seed without FORCE and only when not already in cache so an
+    # explicit `-DCMAKE_CXX_COMPILER=…` on the user's cmake command line
+    # still wins.  Use CACHE STRING to match deal.II's own macro type so
+    # CMake does not emit a type-mismatch warning.
     cc = os.environ.get("CC", "")
     cxx = os.environ.get("CXX", "")
     compiler_cache = ""
     if cc:
         compiler_cache += (
-            f'set(CMAKE_C_COMPILER "{cc}" CACHE FILEPATH "C compiler" FORCE)\n'
+            f'if(NOT DEFINED CACHE{{CMAKE_C_COMPILER}})\n'
+            f'  set(CMAKE_C_COMPILER "{cc}" CACHE STRING "C compiler")\n'
+            f'endif()\n'
         )
     if cxx:
         compiler_cache += (
-            f'set(CMAKE_CXX_COMPILER "{cxx}" CACHE FILEPATH "C++ compiler" FORCE)\n'
+            f'if(NOT DEFINED CACHE{{CMAKE_CXX_COMPILER}})\n'
+            f'  set(CMAKE_CXX_COMPILER "{cxx}" CACHE STRING "C++ compiler")\n'
+            f'endif()\n'
         )
 
     return f"""\

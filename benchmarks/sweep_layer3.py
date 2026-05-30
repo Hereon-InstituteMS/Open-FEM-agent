@@ -85,9 +85,13 @@ def _discover_env():
                 break
 
 
-_discover_env()
+# NOTE: `_discover_env()` mutates os.environ.  It is invoked at the top of
+# main() (not at import time) so that importing this module as a library —
+# e.g. for unit-testing the matrix definition or `Cell` dataclass — does not
+# silently rewrite CC, CXX, CMAKE_PREFIX_PATH, DEAL_II_DIR, FOURC_BINARY in
+# the calling process.
 
-# ── imports that need the env to be set ───────────────────────────────────
+# ── imports that need the registry available at module scope ──────────────
 from core.registry import load_all_backends, get_backend  # noqa: E402
 from core.backend import BackendStatus  # noqa: E402
 from core.post_processing import post_process_file  # noqa: E402
@@ -141,9 +145,9 @@ MATRIX: dict[str, list[Cell]] = {
         # Reference: -Δu = 1 on [0,1]², u = 0 on ∂Ω.
         # Analytic max(u) ≈ 0.07367 (Fourier series, ~5-digit accuracy).
         Cell("skfem",   "poisson", "2d",         {"kappa": _KAPPA, "nx": 32, "ny": 32},
-             field="u", expected=0.0737, rtol=0.05),
+             field="phi", expected=0.0737, rtol=0.05),
         Cell("ngsolve", "poisson", "2d",         {"kappa": _KAPPA, "nx": 32, "ny": 32},
-             field="u", expected=0.0737, rtol=0.05),
+             field="phi", expected=0.0737, rtol=0.05),
         Cell("fenics",  "poisson", "2d",         {"kappa": _KAPPA, "nx": 32, "ny": 32},
              field="u", expected=0.0737, rtol=0.05),
         # Kratos `poisson_2d` is a known-fake scipy stub — see F-013 in
@@ -212,16 +216,22 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     if vtu_files and cell.field is not None:
         try:
             pp = post_process_file(vtu_files[-1], plot_dir=work_dir, plot_fields=False)
+            available = [f.name for f in pp.fields]
             for f in pp.fields:
                 if f.name == cell.field or f.name.lower() == cell.field.lower():
                     scalar = float(f.max)
                     field_used = f.name
                     break
-            # Fall back to first available scalar field if exact match missed.
-            if scalar is None and pp.fields:
-                f0 = pp.fields[0]
-                scalar = float(f0.max)
-                field_used = f0.name + " (fallback)"
+            # No fallback.  A silent fallback to `pp.fields[0]` would happily
+            # report max(Owner) (a cell-ID integer) as if it were `u`, which
+            # is exactly the kind of stealth-wrong result this sweep exists
+            # to catch.  If the expected field is absent we report the gap
+            # explicitly so the matrix shows it, leaving the cell scalar=None.
+            if scalar is None:
+                return CellResult(
+                    cell, status="field_not_found", elapsed_s=elapsed,
+                    error=f"expected field {cell.field!r} absent; available: {available[:8]}",
+                )
         except Exception as e:
             return CellResult(cell, status="postproc_failed", elapsed_s=elapsed,
                               error=f"{type(e).__name__}: {e!s:.300}")
@@ -292,6 +302,7 @@ async def main():
                    help="comma-separated row names (POISSON,ELASTICITY,...)")
     args = p.parse_args()
 
+    _discover_env()  # mutate os.environ here, not at module-import time
     load_all_backends()
     print("loaded backends:")
     from core.registry import available_backends
