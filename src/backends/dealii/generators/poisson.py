@@ -635,17 +635,21 @@ GENERAL_KNOWLEDGE = {
     "element_types": {
         "H1": "FE_Q(p), FE_Q_Hierarchical(p), FE_Bernstein(p), FE_Hermite(p), FE_SimplexP(p)",
         "H1_enriched": (
-            "FE_Q_Bubbles(p) — Q with cell-interior bubble enrichment, useful "
-            "for stabilised Stokes-like saddle-point problems where extra "
-            "interior dofs cure inf-sup issues; "
-            "FE_SimplexP_Bubbles(p) — simplex P with bubble enrichment for "
-            "the same purpose on triangular/tetrahedral meshes; "
-            "FE_Q_DG0(p) — continuous Q with one discontinuous mode, "
-            "used for enriched-pressure stabilisations; "
-            "FE_Q_iso_Q1(p) — isoparametric subdivision of Q(p) into Q1 "
-            "patches, kept for multilevel/coarse-grid constructions; "
-            "FE_RannacherTurek(0) — rotated-bilinear nonconforming Q1, "
-            "the classical Rannacher-Turek element for Stokes."
+            "FE_Q_Bubbles(p) — Q with cell-interior bubble enrichment "
+            "(adds one bubble per cell on top of the standard Q basis).  "
+            "Upstream caveat: condition number grows quickly for p > 3; "
+            "use the lowest applicable degree.  "
+            "FE_SimplexP_Bubbles(p) — simplex analogue of FE_Q_Bubbles "
+            "(P basis on triangles/tetrahedra plus a cell-interior bubble); "
+            "FE_Q_DG0(p) — Lagrange Qp **plus** the space of cell-wise "
+            "constant functions (Qp+DG0), continuous in the Lagrange part "
+            "and discontinuous in the added piecewise-constant part; "
+            "FE_Q_iso_Q1(p) — piecewise (bi-/tri-)linear functions on a "
+            "macro-element of p^dim sub-cells: the cell is conceptually "
+            "split into p subdivisions per coordinate direction and a Q1 "
+            "basis is laid down on the resulting subcells; "
+            "FE_RannacherTurek(0) — classical nonconforming first-order "
+            "element (degree argument is fixed to 0 in upstream)."
         ),
         "DG": "FE_DGQ(p), FE_DGQLegendre(p), FE_DGQHermite(p), FE_DGP(p), FE_SimplexDGP(p)",
         "DG_advanced": (
@@ -657,14 +661,16 @@ GENERAL_KNOWLEDGE = {
             "comparison and analytic-coefficient access); "
             "FE_DGPNonparametric(p) — DG with a non-parametric mapping, "
             "i.e. polynomials defined in physical (not reference) space; "
-            "FE_DGVector — generic vector-valued DG wrapper around any "
-            "scalar DG family; "
-            "FE_DGBDM(k) — DG version of FE_BDM (Brezzi-Douglas-Marini) "
-            "for H(div) without inter-element continuity; "
-            "FE_DGRaviartThomas(k) — DG analogue of FE_RaviartThomas, "
-            "used in DG mixed methods; "
-            "FE_DGNedelec(k) — DG analogue of FE_Nedelec for H(curl) "
-            "discontinuous discretisations."
+            "FE_DGVector<PolynomialsType> — class template defined in "
+            "fe_dg_vector.h that wraps a vector-valued polynomial space "
+            "(PolynomialsRaviartThomas, PolynomialsNedelec, PolynomialsBDM) "
+            "into a DG element.  The three concrete instantiations are: "
+            "FE_DGRaviartThomas(k) — DG element built on the RT polynomial "
+            "space (used in DG mixed methods); "
+            "FE_DGNedelec(k) — DG element on the Nédélec polynomial space "
+            "(discontinuous H(curl)-type approximation); "
+            "FE_DGBDM(k) — DG element on the Brezzi-Douglas-Marini "
+            "polynomial space (discontinuous H(div)-type approximation)."
         ),
         "H(div)": "FE_RaviartThomas(k), FE_BDM(k), FE_ABF(k), FE_BernardiRaugel(1)",
         "H(div)_advanced": (
@@ -691,19 +697,19 @@ GENERAL_KNOWLEDGE = {
             "FE_PyramidP(p) — continuous P element on pyramidal (square-base) "
             "3D cells, used in transition meshes between hex and tet regions; "
             "FE_PyramidDGP(p) — DG counterpart of FE_PyramidP; "
-            "FE_PyramidPoly — generic polynomial base for pyramid cells "
-            "(template scaffolding the two above sit on top of); "
             "FE_WedgeP(p) — continuous P element on wedge (triangular-prism) "
             "3D cells, the second transition shape between hex and tet; "
-            "FE_WedgeDGP(p) — DG counterpart of FE_WedgeP; "
-            "FE_WedgePoly — generic polynomial base for wedge cells."
+            "FE_WedgeDGP(p) — DG counterpart of FE_WedgeP."
         ),
         "special": "FE_FaceQ(p), FE_Nothing, FE_Enriched, FE_P1NC, FESystem, hp::FECollection",
         "internal_polynomial_bases": (
-            "FE_Poly, FE_PolyFace, FE_PolyTensor, FE_Q_Base, FE_SimplexPoly — "
-            "abstract base classes that the concrete elements above are "
-            "templated on.  Listed here only so the agent does not propose "
-            "them in user code; these classes are not directly instantiated."
+            "FE_Poly, FE_PolyFace, FE_PolyTensor, FE_Q_Base, FE_SimplexPoly, "
+            "FE_PyramidPoly, FE_WedgePoly — abstract polynomial base classes "
+            "that the concrete elements above are templated on (e.g. FE_Q is "
+            "an FE_Q_Base; FE_PyramidP is an FE_PyramidPoly; FE_SimplexP is "
+            "an FE_SimplexPoly).  Listed here only so the agent does not "
+            "propose them in user code; these classes have no public "
+            "stand-alone constructor and are not directly instantiated."
         ),
     },
     "mesh_generators": [
