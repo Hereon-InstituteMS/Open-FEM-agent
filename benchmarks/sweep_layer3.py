@@ -357,12 +357,15 @@ MATRIX: dict[str, list[Cell]] = {
         # velocity magnitude, which `core.post_processing.post_process_file`
         # produces via `np.linalg.norm(arr, axis=1)` for vector fields.
 
-        # skfem's `stokes/2d` template raises
-        # `ValueError: Quadrature mismatch: trial and test functions
-        # should have same number of integration points` — the
-        # Taylor-Hood mixed basis is assembled with mismatched
-        # quadrature orders between velocity P2 and pressure P1.
-        # Template bug.
+        # skfem's `stokes/2d` template has two stacked defects:
+        # (a) it raises `ValueError: Quadrature mismatch: trial and
+        # test functions should have same number of integration
+        # points` because the Taylor-Hood mixed basis is assembled
+        # with mismatched quadrature orders between velocity P2 and
+        # pressure P1; and (b) even with (a) fixed, the template
+        # writes only a `results_summary.json` and never a `.vtu`,
+        # so the cell would still report `no_vtu_output` until VTU
+        # export is added.  Both are template-side gaps.
         Cell("skfem",   "stokes", "2d", {"nx": 32, "ny": 32},
              field="velocity", expected=None, rtol=0.5),
         # NGSolve's `stokes/2d` template runs to the solver step then
@@ -395,11 +398,14 @@ MATRIX: dict[str, list[Cell]] = {
         # construction (lid velocity = 1).  Most working templates
         # report the maximum velocity magnitude across nodes.
 
-        # skfem's `navier_stokes/2d` template raises a TypeError /
-        # AttributeError at solve.py runtime — driver-script bug; the
-        # boundary-tag pattern is the same as the linear_elasticity
-        # template before its fix and probably needs the same
-        # `with_boundaries({...})` treatment.
+        # skfem's `navier_stokes/2d` template has two stacked defects:
+        # (a) it raises a TypeError / AttributeError at solve.py
+        # runtime (same untagged-boundary pattern the linear_elasticity
+        # template had before its `with_boundaries({...})` fix); and
+        # (b) even with (a) fixed, the template writes a `result.vtu`
+        # whose `point_data` is mesh-only — no `velocity` or
+        # `pressure` arrays — so the cell would still report
+        # `field_not_found` until the VTU export is extended.
         Cell("skfem",   "navier_stokes", "2d", {"Re": 100, "nx": 32},
              field="velocity", expected=None, rtol=0.5),
         # NGSolve's NS template runs cleanly on the lid-driven cavity
@@ -411,10 +417,15 @@ MATRIX: dict[str, list[Cell]] = {
         # qualitative expectation (max |u| around the lid).
         Cell("fenics",  "navier_stokes", "2d", {"Re": 100, "nx": 32},
              field="velocity", expected=None, rtol=0.5),
-        # deal.II NS — same conda-forge dealii 9.1.1 + TBB
-        # build-fail situation; cell will report `failed` until that
-        # env is rebuilt.
-        Cell("dealii",  "navier_stokes", "2d", {},
+        # deal.II NS — two stacked gaps: (a) the same conda-forge
+        # dealii 9.1.1 + TBB build-fail situation as the other
+        # deal.II rows; and (b) the deal.II `navier_stokes/2d`
+        # template itself is a placeholder `main()` that prints a
+        # status message and exits 0 — no solve, no `data_out`,
+        # no `.vtu`.  Even once the env is rebuilt the cell will
+        # report `no_vtu_output` until a real NS template is
+        # written.  Pass explicit Re for matrix self-containment.
+        Cell("dealii",  "navier_stokes", "2d", {"Re": 100},
              field="velocity", expected=None, rtol=0.5),
     ],
 
@@ -440,8 +451,12 @@ MATRIX: dict[str, list[Cell]] = {
         Cell("fenics",  "hyperelasticity", "3d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
         # deal.II hyperelasticity — same conda-forge build-fail
-        # situation as the other deal.II rows.
-        Cell("dealii",  "hyperelasticity", "3d", {},
+        # situation as the other deal.II rows.  Pass explicit
+        # material parameters so the matrix entry is self-contained
+        # and immune to silent drift if the template's defaults
+        # change, matching the policy used for the other cells in
+        # this row.
+        Cell("dealii",  "hyperelasticity", "3d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
     ],
 }
