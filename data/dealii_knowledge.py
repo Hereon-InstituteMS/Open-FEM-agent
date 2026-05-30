@@ -106,15 +106,32 @@ DEALII_KNOWLEDGE = {
             "FE_SimplexP(p)": "Lagrange on simplices (triangles/tetrahedra)",
             "FE_SimplexP_Bubbles(p)": "Simplex Lagrange + bubble enrichment",
         },
+        "H1_enriched": {
+            "FE_Q_Bubbles(p)": "Q + cell-interior bubble enrichment (caveat: condition number grows fast for p>3)",
+            "FE_Q_DG0(p)": "Lagrange Qp plus the space of cell-wise constant functions (Qp+DG0)",
+            "FE_Q_iso_Q1(p)": "Piecewise (bi-/tri-)linear functions on a macro-element of p^dim sub-cells",
+            "FE_RannacherTurek(0)": "Classical nonconforming first-order element (degree fixed to 0 upstream)",
+        },
         "DG_discontinuous": {
             "FE_DGQ(p)": "Tensor-product DG, equidistant points",
             "FE_DGQLegendre(p)": "DG with Legendre basis (orthogonal, good for L2 projection)",
             "FE_DGQHermite(p)": "DG Hermite-like (optimal for matrix-free, sum factorization)",
+            "FE_DGQArbitraryNodes(quadrature)": "DG_Q on a user-chosen node set (Gauss-Lobatto/Gauss/equispaced) for matrix-free / spectral-element style discretisations",
             "FE_DGP(p)": "Complete polynomial DG (fewer DOFs than DGQ for same order)",
+            "FE_DGPMonomial(p)": "DG using the monomial polynomial basis rather than the standard nodal basis",
+            "FE_DGPNonparametric(p)": "DG with a non-parametric mapping (polynomials defined in physical space)",
             "FE_SimplexDGP(p)": "DG on simplices",
+        },
+        "DG_vector_valued": {
+            "FE_DGVector<PolynomialsType>": "Class template in fe_dg_vector.h that wraps a vector-valued polynomial space into a DG element. The three concrete instantiations below derive from it",
+            "FE_DGRaviartThomas(k)": "DG element on the RT polynomial space (DG mixed methods)",
+            "FE_DGNedelec(k)": "DG element on the Nédélec polynomial space (discontinuous H(curl)-type)",
+            "FE_DGBDM(k)": "DG element on the Brezzi-Douglas-Marini polynomial space (discontinuous H(div)-type)",
         },
         "Hdiv_conforming": {
             "FE_RaviartThomas(k)": "Raviart-Thomas (normal continuous, for mixed Poisson/Darcy)",
+            "FE_RaviartThomasNodal(k)": "RT with a nodal-DoF representation (alternative to the moment-based default)",
+            "FE_RT_Bubbles(k)": "RT enriched with interior bubble functions for improved approximation order",
             "FE_BDM(k)": "Brezzi-Douglas-Marini (full polynomial H(div))",
             "FE_ABF(k)": "Arnold-Boffi-Falk",
             "FE_BernardiRaugel(1)": "Inf-sup stable with DGP(0) for Stokes",
@@ -122,6 +139,18 @@ DEALII_KNOWLEDGE = {
         "Hcurl_conforming": {
             "FE_Nedelec(k)": "Nédélec edge elements for Maxwell/electromagnetics",
             "FE_NedelecSZ(k)": "Schoeberl-Zaglmayr ordering variant",
+            "FE_NedelecNodal(k)": "Nédélec with nodal-interpolation DoF setup (alternative to the default)",
+        },
+        "trace_and_face": {
+            "FE_FaceQ(p)": "Q-polynomial face element for hybridised DG interface unknowns (HDG, step-51)",
+            "FE_FaceP(p)": "P-polynomial face element, simplex analogue of FE_FaceQ",
+            "FE_TraceQ(p)": "Trace of FE_Q on element faces (Lagrange-multiplier / HDG stabilisations)",
+        },
+        "pyramid_and_wedge_3d": {
+            "FE_PyramidP(p)": "Continuous P element on pyramidal (square-base) 3D cells — hex<->tet transition",
+            "FE_PyramidDGP(p)": "DG counterpart of FE_PyramidP",
+            "FE_WedgeP(p)": "Continuous P element on wedge (triangular-prism) 3D cells — hex<->tet transition",
+            "FE_WedgeDGP(p)": "DG counterpart of FE_WedgeP",
         },
         "special": {
             "FE_FaceQ(p)": "DOFs on faces only (for HDG trace systems, step-51)",
@@ -130,6 +159,21 @@ DEALII_KNOWLEDGE = {
             "FE_P1NC": "Nonconforming P1 (Crouzeix-Raviart analogue)",
             "FESystem": "Combine multiple FE into vector/tensor systems",
             "hp::FECollection": "Collection of different FE for hp-adaptivity",
+        },
+        "internal_polynomial_bases": {
+            "_note": (
+                "Abstract polynomial base classes that the concrete elements "
+                "above are templated on (FE_Q is an FE_Q_Base; FE_PyramidP is "
+                "an FE_PyramidPoly; etc.).  No public stand-alone constructor "
+                "— do NOT propose these as user-facing element choices."
+            ),
+            "FE_Poly": "Base class for polynomial-based scalar elements",
+            "FE_PolyFace": "Face-only polynomial base class",
+            "FE_PolyTensor": "Tensor-product polynomial base class",
+            "FE_Q_Base": "Base of the FE_Q family (FE_Q, FE_Q_Hierarchical, FE_Q_Bubbles, ...)",
+            "FE_SimplexPoly": "Base of the FE_SimplexP family",
+            "FE_PyramidPoly": "Base of the FE_PyramidP / FE_PyramidDGP family",
+            "FE_WedgePoly": "Base of the FE_WedgeP / FE_WedgeDGP family",
         },
     },
 
