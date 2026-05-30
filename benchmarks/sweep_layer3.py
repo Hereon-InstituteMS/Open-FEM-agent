@@ -142,8 +142,17 @@ class CellResult:
 # Reference problem per row:
 #
 #   POISSON           -Δu = 1 on [0,1]², u = 0 on ∂Ω.  max(u) ≈ 0.0737.
+#   ELASTICITY        Plane-strain linear elasticity on the rectangular
+#                     domain each backend's `linear_elasticity/2d` (or
+#                     equivalent) template ships with.  E=1000, ν=0.3.
+#                     Comparison metric: max(|displacement|) across all
+#                     reporting backends agrees to within the same order
+#                     of magnitude (no closed-form ref because the
+#                     templates do NOT use a shared geometry yet — F-015
+#                     follow-up: standardise the elasticity templates so
+#                     a single analytic reference can be used).
 #
-# More rows (elasticity, heat, stokes, …) are added in follow-up PRs.
+# More rows (heat, stokes, …) are added in follow-up PRs.
 # Sweep accepts --only to filter to a comma-separated subset.
 
 _KAPPA = 1.0
@@ -183,6 +192,56 @@ MATRIX: dict[str, list[Cell]] = {
              field="solution", expected=0.0737, rtol=0.05),
         Cell("fourc",   "poisson", "poisson_2d", {},
              field="phi_1", expected=0.0737, rtol=0.05),
+    ],
+    "ELASTICITY": [
+        # skfem's `linear_elasticity/2d` template constructs a mesh via
+        # MeshQuad.init_tensor (no boundary tags) but then calls
+        # `ib.get_dofs("left")`, which raises because the mesh has no
+        # "left" tag.  Template never reaches the assemble step and the
+        # backend's run() therefore produces no .vtu.  Bug in the
+        # template, not in the sweep — kept here so the matrix surfaces
+        # the gap on every run.
+        Cell("skfem",   "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
+             field="displacement", expected=None, rtol=0.5),
+        # ngsolve and fenics write the displacement field as
+        # "displacement" (vector); the field accessor reports the
+        # per-component max so the scalar here is the max single
+        # component, not the displacement magnitude.  Cross-backend
+        # consistency is checked qualitatively by both reporting numbers
+        # of comparable order of magnitude.
+        Cell("ngsolve", "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
+             field="displacement", expected=None, rtol=0.5),
+        Cell("fenics",  "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
+             field="displacement", expected=None, rtol=0.5),
+        # Kratos's `linear_elasticity/2d_nonlinear` is the only variant
+        # that imports KratosMultiphysics (the plain `linear_elasticity/2d`
+        # is one of the 8 known scipy stubs), but the script body is a
+        # placeholder that prints "StructuralMechanicsApplication
+        # available" and writes a JSON summary instead of actually running
+        # a structural analysis.  The cell completes but produces no .vtu,
+        # so the sweep reports "no_vtu_output" — which is precisely the
+        # right signal: validation passes superficially, runtime does
+        # nothing useful.  Replacement with a real Kratos cantilever
+        # analysis is a follow-up.
+        Cell("kratos",  "linear_elasticity", "2d_nonlinear", {"E": 1000, "nu": 0.3},
+             field="DISPLACEMENT", expected=None, rtol=0.5),
+        # deal.II's `linear_elasticity/2d` template needs the same
+        # compiler + TBB setup as POISSON (see the deal.II POISSON cell
+        # for the F-014-style env explanation).  Field name in the
+        # generated main.cpp is the displacement vector "u" via
+        # data_out.add_data_vector(displacement, "u").
+        Cell("dealii",  "linear_elasticity", "2d", {},
+             field="u", expected=None, rtol=0.5),
+        # 4C's `linear_elasticity/2d` template emits an input that
+        # references the legacy "WALL" element type, which is not
+        # registered in the build of 4C produced by this project's
+        # build script (4C builds it conditionally and our build did
+        # not enable it).  Run aborts at mesh-read time with
+        # "Unknown type 'WALL' of finite element".  Either re-build 4C
+        # with the wall element enabled, or update the template to use
+        # the modern `SOLID` 2D element — follow-up.
+        Cell("fourc",   "linear_elasticity", "2d", {},
+             field="displacement", expected=None, rtol=0.5),
     ],
 }
 
