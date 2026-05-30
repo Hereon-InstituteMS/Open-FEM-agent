@@ -145,12 +145,17 @@ class CellResult:
 #   ELASTICITY        Plane-strain linear elasticity on the rectangular
 #                     domain each backend's `linear_elasticity/2d` (or
 #                     equivalent) template ships with.  E=1000, ν=0.3.
-#                     Comparison metric: max(|displacement|) across all
-#                     reporting backends agrees to within the same order
-#                     of magnitude (no closed-form ref because the
-#                     templates do NOT use a shared geometry yet — F-015
-#                     follow-up: standardise the elasticity templates so
-#                     a single analytic reference can be used).
+#                     Comparison metric: max of the L2 magnitude of the
+#                     displacement field across nodes — this is what
+#                     `core.post_processing.post_process_file` reports
+#                     for multi-component point arrays via
+#                     `np.linalg.norm(arr, axis=1)`, so the scalar
+#                     numbers in the table for vector fields are
+#                     magnitudes, not per-component maxima.  No
+#                     closed-form reference yet because the templates
+#                     do NOT use a shared geometry — standardising the
+#                     elasticity templates so a single analytic
+#                     reference can be used is a follow-up.
 #
 # More rows (heat, stokes, …) are added in follow-up PRs.
 # Sweep accepts --only to filter to a comma-separated subset.
@@ -194,21 +199,26 @@ MATRIX: dict[str, list[Cell]] = {
              field="phi_1", expected=0.0737, rtol=0.05),
     ],
     "ELASTICITY": [
-        # skfem's `linear_elasticity/2d` template constructs a mesh via
-        # MeshQuad.init_tensor (no boundary tags) but then calls
-        # `ib.get_dofs("left")`, which raises because the mesh has no
-        # "left" tag.  Template never reaches the assemble step and the
-        # backend's run() therefore produces no .vtu.  Bug in the
-        # template, not in the sweep — kept here so the matrix surfaces
-        # the gap on every run.
+        # skfem's `linear_elasticity/2d` template has two stacked
+        # problems: (a) it constructs a tensor-product mesh with no
+        # boundary tags and then calls `ib.get_dofs("left")`, which
+        # raises; and (b) even if (a) is fixed, the template writes a
+        # `results_summary.json` only, never a .vtu, so the sweep would
+        # then transition from `failed` to `no_vtu_output`.  Both are
+        # template bugs to address upstream.  The cell is kept so the
+        # matrix surfaces the gap on every run.
         Cell("skfem",   "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
         # ngsolve and fenics write the displacement field as
-        # "displacement" (vector); the field accessor reports the
-        # per-component max so the scalar here is the max single
-        # component, not the displacement magnitude.  Cross-backend
-        # consistency is checked qualitatively by both reporting numbers
-        # of comparable order of magnitude.
+        # "displacement" (vector).  `core.post_processing.post_process_file`
+        # collapses multi-component point arrays via the elementwise L2
+        # magnitude (`np.linalg.norm(arr, axis=1)`) before computing
+        # min/max/mean/std, so the scalar reported below is the
+        # maximum of the displacement magnitude across nodes — *not* a
+        # per-component max.  Cross-backend consistency is checked
+        # qualitatively here (both reporting numbers of comparable
+        # order of magnitude); a shared geometry that admits a closed
+        # form is a follow-up.
         Cell("ngsolve", "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
         Cell("fenics",  "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
@@ -226,12 +236,17 @@ MATRIX: dict[str, list[Cell]] = {
         Cell("kratos",  "linear_elasticity", "2d_nonlinear", {"E": 1000, "nu": 0.3},
              field="DISPLACEMENT", expected=None, rtol=0.5),
         # deal.II's `linear_elasticity/2d` template needs the same
-        # compiler + TBB setup as POISSON (see the deal.II POISSON cell
-        # for the F-014-style env explanation).  Field name in the
-        # generated main.cpp is the displacement vector "u" via
-        # data_out.add_data_vector(displacement, "u").
+        # compiler + TBB setup as POISSON (see the deal.II POISSON
+        # cell for the env explanation).  Output fields in the
+        # generated main.cpp are component-named via
+        # `std::vector<std::string> names = {"ux", "uy"};
+        #  data_out.add_data_vector(solution, names);`
+        # — i.e. there is no single vector field called "u" to extract
+        # from.  Use "uy" (the dominant component for a beam under a
+        # transverse load); when this build path is restored the cell
+        # can be extended with a second variant for "ux".
         Cell("dealii",  "linear_elasticity", "2d", {},
-             field="u", expected=None, rtol=0.5),
+             field="uy", expected=None, rtol=0.5),
         # 4C's `linear_elasticity/2d` template emits an input that
         # references the legacy "WALL" element type, which is not
         # registered in the build of 4C produced by this project's
@@ -239,8 +254,10 @@ MATRIX: dict[str, list[Cell]] = {
         # not enable it).  Run aborts at mesh-read time with
         # "Unknown type 'WALL' of finite element".  Either re-build 4C
         # with the wall element enabled, or update the template to use
-        # the modern `SOLID` 2D element — follow-up.
-        Cell("fourc",   "linear_elasticity", "2d", {},
+        # the modern `SOLID` 2D element — follow-up.  Pass the same
+        # explicit material parameters as the other cells so the matrix
+        # entry remains stable if the template's default E/nu change.
+        Cell("fourc",   "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
     ],
 }
