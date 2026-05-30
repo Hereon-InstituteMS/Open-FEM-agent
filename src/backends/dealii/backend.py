@@ -426,22 +426,26 @@ def _generate_cmakelists(target_name: str) -> str:
     # unconditionally writes the cache without FORCE, so any pre-seeded
     # cache entry wins).
     #
-    # Pre-seed without FORCE and only when not already in cache so an
+    # Pre-seed without FORCE and only when not already defined so an
     # explicit `-DCMAKE_CXX_COMPILER=…` on the user's cmake command line
     # still wins.  Use CACHE STRING to match deal.II's own macro type so
-    # CMake does not emit a type-mismatch warning.
+    # CMake does not emit a type-mismatch warning.  Use plain
+    # `if(NOT DEFINED CMAKE_*_COMPILER)` rather than the `CACHE{}`
+    # operand form, which only works on CMake >= 3.14 (the file declares
+    # a minimum of 3.1).  A `-D` from the command line is visible as a
+    # regular variable too, so this still respects user overrides.
     cc = os.environ.get("CC", "")
     cxx = os.environ.get("CXX", "")
     compiler_cache = ""
     if cc:
         compiler_cache += (
-            f'if(NOT DEFINED CACHE{{CMAKE_C_COMPILER}})\n'
+            f'if(NOT DEFINED CMAKE_C_COMPILER)\n'
             f'  set(CMAKE_C_COMPILER "{cc}" CACHE STRING "C compiler")\n'
             f'endif()\n'
         )
     if cxx:
         compiler_cache += (
-            f'if(NOT DEFINED CACHE{{CMAKE_CXX_COMPILER}})\n'
+            f'if(NOT DEFINED CMAKE_CXX_COMPILER)\n'
             f'  set(CMAKE_CXX_COMPILER "{cxx}" CACHE STRING "C++ compiler")\n'
             f'endif()\n'
         )

@@ -224,7 +224,16 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     vtu_files = sorted([f for f in backend.get_result_files(job) if f.suffix == ".vtu"])
     scalar = None
     field_used = None
-    if vtu_files and cell.field is not None:
+    if cell.field is not None:
+        # A cell that asked for a scalar but received no .vtu is a failure
+        # of the run even if the backend exited 0 — surface it instead of
+        # quietly returning status=completed with scalar=None.
+        if not vtu_files:
+            return CellResult(
+                cell, status="no_vtu_output", elapsed_s=elapsed,
+                error=("backend reported completed but produced no .vtu in "
+                       f"{work_dir}; expected field {cell.field!r}"),
+            )
         try:
             pp = post_process_file(vtu_files[-1], plot_dir=work_dir, plot_fields=False)
             available = [f.name for f in pp.fields]
@@ -323,6 +332,14 @@ async def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     requested = set(s.strip().upper() for s in args.only.split(",") if s.strip())
+    # Fail fast on a typo: an empty result set (silently writing an empty
+    # sweep.json) would look like a successful validation run.
+    unknown = requested - MATRIX.keys()
+    if unknown:
+        raise SystemExit(
+            f"--only references rows that are not in the matrix: "
+            f"{sorted(unknown)} — known rows: {sorted(MATRIX.keys())}"
+        )
     rows_to_run = {n: c for n, c in MATRIX.items() if not requested or n in requested}
 
     results: dict[str, list[CellResult]] = {}
