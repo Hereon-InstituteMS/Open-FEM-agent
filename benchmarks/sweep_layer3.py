@@ -393,10 +393,15 @@ MATRIX: dict[str, list[Cell]] = {
 
     "NAVIER_STOKES": [
         # Lid-driven cavity at Re=100 — the canonical CFD validation
-        # benchmark (Ghia, Ghia & Shin 1982).  Reference centre-line
-        # u_x ≈ -0.21 at the lower wall; max |u| is order unity by
-        # construction (lid velocity = 1).  Most working templates
-        # report the maximum velocity magnitude across nodes.
+        # benchmark (Ghia, Ghia & Shin 1982).  At the walls the
+        # no-slip condition fixes u = 0; the well-known Ghia
+        # tabulated reference is the velocity profile *along the
+        # vertical centre-line* x = 0.5 (e.g. min u_x ≈ -0.21
+        # near mid-height) — NOT a value at the lower wall.  max |u|
+        # over the whole domain is order unity by construction (lid
+        # velocity = 1) and is what the sweep harness extracts for
+        # cross-cell comparison; matching the Ghia centre-line
+        # profile would need a dedicated probe in a follow-up.
 
         # skfem's `navier_stokes/2d` template has two stacked defects:
         # (a) it raises a TypeError / AttributeError at solve.py
@@ -435,10 +440,10 @@ MATRIX: dict[str, list[Cell]] = {
         # own boundary conditions / geometry.  Comparison metric is
         # the max displacement magnitude where extractable.
 
-        # skfem `hyperelasticity/2d` raises during the Newton loop —
-        # template needs review (probably the same boundary-tag bug
-        # the linear_elasticity template had, now exposed in a
-        # nonlinear context).
+        # skfem `hyperelasticity/2d` raises during the Newton loop.
+        # Root cause is not investigated here — the cell records the
+        # observed failure mode (Newton-loop exception, no .vtu);
+        # template-side fix tracked separately.
         Cell("skfem",   "hyperelasticity", "2d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
         # NGSolve `hyperelasticity/2d` raises during the Newton loop
