@@ -145,11 +145,16 @@ class CellResult:
 #   ELASTICITY        Each backend's `linear_elasticity/2d` (or
 #                     equivalent) template on the rectangular domain
 #                     it ships with.  Material: E=1000, ν=0.3.  The
-#                     2D plane-strain-vs-plane-stress choice is NOT
-#                     shared across templates (e.g. FEniCSx ships a
-#                     plane-stress formulation), so the cross-backend
-#                     numbers are not strictly comparable as absolute
-#                     values.  Comparison metric per cell depends on
+#                     2D plane-strain-vs-plane-stress choice is a
+#                     per-template detail and is not enforced here —
+#                     the agent has to read each generator to see
+#                     which it uses (FEniCSx and skfem both compute
+#                     λ = E·ν / ((1+ν)·(1-2ν)), i.e. the standard
+#                     plane-strain / 3D form, so for those two the
+#                     numbers are directly comparable; other backends
+#                     have not been audited here).  As a consequence,
+#                     the cross-backend numbers are NOT guaranteed to
+#                     agree as absolute values across all six cells.  Comparison metric per cell depends on
 #                     the field type:
 #                       - vector-valued displacement output (NGSolve,
 #                         FEniCSx, 4C, Kratos): the scalar reported is
