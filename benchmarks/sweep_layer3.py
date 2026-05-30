@@ -257,14 +257,22 @@ MATRIX: dict[str, list[Cell]] = {
         Cell("fenics",  "heat", "2d_steady", {"kappa": _KAPPA, "nx": 32, "ny": 32},
              field="temperature", expected=100.0, rtol=0.05),
         # Kratos `heat/2d` is a scipy stub (one of the 8 known fake
-        # templates); validate_input correctly rejects it.
+        # templates); validate_input correctly rejects it.  The stub,
+        # if it ever ran, writes its point data under the lowercase
+        # name `"temperature"` (see
+        # src/backends/kratos/generators/heat.py: `point_data={"temperature": u}`).
+        # Use the exact emitted name so the cell stays consistent with
+        # every other entry in the matrix (the harness has a
+        # case-insensitive fallback but relying on it is sloppy).
         Cell("kratos",  "heat", "2d",        {"kappa": _KAPPA, "nx": 32, "ny": 32},
-             field="TEMPERATURE", expected=100.0, rtol=0.05),
+             field="temperature", expected=100.0, rtol=0.05),
         # deal.II steady-state heat — same build-environment caveats
-        # as the POISSON cell apply.  The field in the generated
-        # main.cpp is named `solution`, matching POISSON.
+        # as the POISSON cell apply.  Output field is named
+        # `temperature` (NOT `solution` like POISSON): the heat
+        # template emits `data_out.add_data_vector(solution, "temperature");`,
+        # see src/backends/dealii/generators/heat.py.
         Cell("dealii",  "heat", "2d_steady", {"refinements": 5},
-             field="solution", expected=100.0, rtol=0.05),
+             field="temperature", expected=100.0, rtol=0.05),
         # 4C scatra produces a `phi_1` field; the template's BC
         # values match the FEniCSx hot-cold-wall problem so max ≈ 100.
         Cell("fourc",   "heat", "2d",        {},
