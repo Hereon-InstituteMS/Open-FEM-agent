@@ -265,9 +265,40 @@ class SolidMechanicsGenerator(BaseGenerator):
                     "kinematics": "linear only",
                 },
                 "MAT_crystal_plasticity": {
-                    "description": "Crystal plasticity with slip/twinning systems (FCC/BCC/HCP)",
+                    "description": (
+                        "Single-crystal plasticity with dislocation-density based hardening and "
+                        "optional deformation twinning.  Lattice families: FCC, BCC, HCP, D019, L10 "
+                        "(LAT key, default FCC).  Slip- and twin-system parameters are given as "
+                        "vectors sized by NUMSLIPSETS / NUMTWINSETS — entries map to system sets "
+                        "via SLIPSETMEMBERS / TWINSETMEMBERS."
+                    ),
+                    "parameters": (
+                        # elastic + Newton tolerance
+                        "TOL, YOUNG, NUE, DENS, "
+                        # crystal lattice
+                        "LAT, CTOA, ABASE, "
+                        # slip-system definition (vector sizes follow NUMSLIPSETS)
+                        "NUMSLIPSYS, NUMSLIPSETS, SLIPSETMEMBERS, SLIPRATEEXP, GAMMADOTSLIPREF, "
+                        "DISDENSINIT, DISGENCOEFF, DISDYNRECCOEFF, TAUY0, MFPSLIP, SLIPHPCOEFF, "
+                        "SLIPBYTWIN, "
+                        # twin-system definition (all optional; NUMTWINSYS/SETS default 0)
+                        "NUMTWINSYS, NUMTWINSETS, TWINSETMEMBERS, TWINRATEEXP, GAMMADOTTWINREF, "
+                        "TAUT0, MFPTWIN, TWINHPCOEFF, TWINBYSLIP, TWINBYTWIN"
+                    ),
                     "kinematics": "nonlinear",
-                    "features": "Dislocation density evolution, Hall-Petch, multiple lattice types",
+                    "features": (
+                        "Dislocation-density evolution (generation + dynamic recovery), "
+                        "Hall-Petch via MFPSLIP/MFPTWIN with HP coefficients, "
+                        "slip-twin and twin-twin coupling, multiple lattice types"
+                    ),
+                    "pitfalls": (
+                        "Vector parameters must have exact size NUMSLIPSETS (or NUMTWINSETS) — "
+                        "wrong size triggers a 4C input parser error.  SLIPSETMEMBERS uses "
+                        "1-based indices into NUMSLIPSETS.  Twinning is optional: leave "
+                        "NUMTWINSYS=NUMTWINSETS=0 and omit the TWIN* / GAMMADOTTWINREF / TAUT0 / "
+                        "MFPTWIN / TWINHPCOEFF / TWINBYSLIP / TWINBYTWIN vectors (their "
+                        "default is the empty vector) for pure slip plasticity."
+                    ),
                 },
             },
             "plasticity_pitfalls": [
