@@ -159,8 +159,11 @@ MATRIX: dict[str, list[Cell]] = {
         # legacy tbb/task.h header which was removed in TBB 2020.x — see
         # F-014.  Conda only ships dealii up to 9.3.2 against python<=3.10,
         # and ofa-dealii is pinned to 3.12.  Needs a separate env to fix.
+        # deal.II's Poisson template writes the result vector as "solution"
+        # (data_out.add_data_vector(solution, "solution") in the generated
+        # main.cpp), so the expected field name here is "solution", not "u".
         Cell("dealii",  "poisson", "2d",         {"refinements": 5},
-             field="u", expected=0.0737, rtol=0.05),
+             field="solution", expected=0.0737, rtol=0.05),
         Cell("fourc",   "poisson", "poisson_2d", {},
              field="phi_1", expected=0.0737, rtol=0.05),
     ],
@@ -196,6 +199,14 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
         return CellResult(cell, status="validation_failed", elapsed_s=None,
                           error="; ".join(errors)[:300])
 
+    # Clear any artefacts from a previous sweep run in this cell's directory
+    # before we ask the backend to run — otherwise stale .vtu files from a
+    # different revision could be picked up by `backend.get_result_files(job)`
+    # and a non-VTU-producing run would silently report the previous run's
+    # scalar as a pass.
+    if work_dir.exists():
+        import shutil
+        shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     try:
         job = await backend.run(content, work_dir, np=1, timeout=600)
