@@ -142,6 +142,22 @@ class CellResult:
 # Reference problem per row:
 #
 #   POISSON           -Δu = 1 on [0,1]², u = 0 on ∂Ω.  max(u) ≈ 0.0737.
+#   HEAT              Steady-state heat conduction.  Each backend's
+#                     `heat` template ships with a different canonical
+#                     problem: the working FEniCSx and 4C templates
+#                     both solve a Dirichlet hot/cold-wall problem
+#                     (T=0 on one side, T=100 on the other, no source)
+#                     so max(T) = 100 by boundary data, *not* the
+#                     source-driven 0.0737 from POISSON.  Variant
+#                     names are not shared across backends (FEniCSx
+#                     and deal.II use `2d_steady`; skfem / NGSolve /
+#                     Kratos / 4C use a plain `2d`); the cell entries
+#                     below pick the right variant per backend.  As
+#                     with POISSON, the comparison scalar is max(T)
+#                     of whichever scalar field the template emits
+#                     (the field name itself is per-backend: FEniCSx
+#                     `temperature`, 4C `phi_1`, ...).
+#
 #   ELASTICITY        Each backend's `linear_elasticity/2d` (or
 #                     equivalent) template on the rectangular domain
 #                     it ships with.  Material: E=1000, ν=0.3.  The
@@ -212,6 +228,55 @@ MATRIX: dict[str, list[Cell]] = {
              field="solution", expected=0.0737, rtol=0.05),
         Cell("fourc",   "poisson", "poisson_2d", {},
              field="phi_1", expected=0.0737, rtol=0.05),
+    ],
+    "HEAT": [
+        # Steady-state heat conduction.  The FEniCSx and 4C `heat/*`
+        # templates both ship a Dirichlet hot-cold-wall problem
+        # (T=0 on cold side, T=100 on hot side, no volumetric source),
+        # so the working backends agree on max(T) = 100.  The other
+        # backends fail in different ways (template bugs / unknown
+        # variants / scipy stubs), all surfaced by the cells below.
+
+        # skfem's `heat/2d` template subscripts a DofsView with a
+        # string (`dofs["left"]`); DofsView is not subscriptable that
+        # way in the current scikit-fem release, so the template
+        # raises TypeError at execution.  Template bug.
+        Cell("skfem",   "heat", "2d",        {"kappa": _KAPPA, "nx": 32, "ny": 32},
+             field="phi", expected=100.0, rtol=0.05),
+        # NGSolve's `heat/2d` template constructs the RHS via
+        # `LinearForm(0*v*dx)` which raises NgException("Linearform
+        # must have TestFunction") because the zero coefficient
+        # strips the TestFunction.  Template bug — should use either
+        # `LinearForm(1*v*dx)` for f=1 or build the form from `v*dx`
+        # directly.
+        Cell("ngsolve", "heat", "2d",        {"kappa": _KAPPA, "nx": 32, "ny": 32},
+             field="phi", expected=100.0, rtol=0.05),
+        # FEniCSx exposes explicit steady-vs-transient variants; we
+        # pick `2d_steady`.  Output field is named `temperature`
+        # (not `u`); max = 100 by Dirichlet data.
+        Cell("fenics",  "heat", "2d_steady", {"kappa": _KAPPA, "nx": 32, "ny": 32},
+             field="temperature", expected=100.0, rtol=0.05),
+        # Kratos `heat/2d` is a scipy stub (one of the 8 known fake
+        # templates); validate_input correctly rejects it.  The stub,
+        # if it ever ran, writes its point data under the lowercase
+        # name `"temperature"` (see
+        # src/backends/kratos/generators/heat.py: `point_data={"temperature": u}`).
+        # Use the exact emitted name so the cell stays consistent with
+        # every other entry in the matrix (the harness has a
+        # case-insensitive fallback but relying on it is sloppy).
+        Cell("kratos",  "heat", "2d",        {"kappa": _KAPPA, "nx": 32, "ny": 32},
+             field="temperature", expected=100.0, rtol=0.05),
+        # deal.II steady-state heat — same build-environment caveats
+        # as the POISSON cell apply.  Output field is named
+        # `temperature` (NOT `solution` like POISSON): the heat
+        # template emits `data_out.add_data_vector(solution, "temperature");`,
+        # see src/backends/dealii/generators/heat.py.
+        Cell("dealii",  "heat", "2d_steady", {"refinements": 5},
+             field="temperature", expected=100.0, rtol=0.05),
+        # 4C scatra produces a `phi_1` field; the template's BC
+        # values match the FEniCSx hot-cold-wall problem so max ≈ 100.
+        Cell("fourc",   "heat", "2d",        {},
+             field="phi_1", expected=100.0, rtol=0.05),
     ],
     "ELASTICITY": [
         # skfem's `linear_elasticity/2d` template has two stacked
