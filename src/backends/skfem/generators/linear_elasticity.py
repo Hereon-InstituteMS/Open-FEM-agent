@@ -18,7 +18,9 @@ from skfem.models.elasticity import linear_elasticity, lame_parameters
 import numpy as np
 import json
 
-m = MeshQuad.init_tensor(np.linspace(0, {lx}, {nx+1}), np.linspace(0, {ly}, {ny+1}))
+_tol = 1e-10
+m = (MeshQuad.init_tensor(np.linspace(0, {lx}, {nx+1}), np.linspace(0, {ly}, {ny+1}))
+     .with_boundaries({{"left": lambda x: x[0] < _tol}}))
 e = ElementVector(ElementQuad1())
 ib = Basis(m, e)
 
@@ -32,7 +34,10 @@ def body_force(v, w):
 
 f = body_force.assemble(ib)
 
-# Fix left edge
+# Fix left edge.  In scikit-fem >= 8 the boundary lookup requires the
+# mesh to have been tagged via `with_boundaries({{...}})` (done above)
+# so `get_dofs("left")` resolves to the tagged facets.  Without the
+# tag the call raises because the mesh has no "left" facet group.
 D = ib.get_dofs("left").flatten()
 u = solve(*condense(K, f, D=D))
 
@@ -40,6 +45,18 @@ u = solve(*condense(K, f, D=D))
 u_reshaped = u.reshape(2, -1)
 max_uy = u_reshaped[1].min()
 print(f"Max tip displacement: {{max_uy:.6f}}")
+
+# Write a VTU so the sweep harness (and any other downstream consumer)
+# can recover the displacement field, not just the scalar summary.
+try:
+    import meshio
+    cells = [("quad", m.t.T)]
+    points = np.column_stack([m.p.T, np.zeros(m.p.shape[1])]) if m.p.shape[0] == 2 else m.p.T
+    displacement = u_reshaped.T  # (n_nodes, 2)
+    displacement_3 = np.column_stack([displacement, np.zeros(displacement.shape[0])])
+    meshio.Mesh(points, cells, point_data={{"displacement": displacement_3}}).write("result.vtu")
+except Exception as _e:
+    print(f"VTU write skipped: {{_e}}")
 
 summary = {{"max_displacement_y": float(max_uy), "n_dofs": int(K.shape[0])}}
 with open("results_summary.json", "w") as _f:

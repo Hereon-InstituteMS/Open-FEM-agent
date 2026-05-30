@@ -15,21 +15,33 @@ from skfem.models.poisson import laplace
 import numpy as np
 import json
 
-m = MeshQuad.init_tensor(np.linspace(0, 1, {nx+1}), np.linspace(0, 1, {nx+1}))
+_tol = 1e-10
+m = (MeshQuad.init_tensor(np.linspace(0, 1, {nx+1}), np.linspace(0, 1, {nx+1}))
+     .with_boundaries({{
+         "left":  lambda x: x[0] < _tol,
+         "right": lambda x: x[0] > 1.0 - _tol,
+     }}))
 e = ElementQuad1()
 ib = Basis(m, e)
 
 K = laplace.assemble(ib)
 f = ib.zeros()
 
-# Dirichlet BCs
-dofs = ib.get_dofs()
-left_dofs = dofs["left"].flatten()
-right_dofs = dofs["right"].flatten()
+# Dirichlet BCs.  In scikit-fem >= 8, dofs are looked up by passing the
+# boundary tag name to `get_dofs(...)` directly; the older
+# `ib.get_dofs()["name"]` subscript form raises TypeError because
+# `DofsView` is not subscriptable by string.
+left_dofs = ib.get_dofs("left").flatten()
+right_dofs = ib.get_dofs("right").flatten()
 D = np.concatenate([left_dofs, right_dofs])
-d_vals = np.concatenate([np.full(len(left_dofs), {T_left}), np.full(len(right_dofs), {T_right})])
+# `condense(..., x=...)` expects a full-size vector (length = total DOFs)
+# with the prescribed values at the constrained positions, NOT just the
+# boundary values concatenated.  Build the full vector explicitly.
+x_full = ib.zeros()
+x_full[left_dofs]  = {T_left}
+x_full[right_dofs] = {T_right}
 
-u = solve(*condense(K, f, x=d_vals, D=D))
+u = solve(*condense(K, f, x=x_full, D=D))
 print(f"Temperature: max={{u.max():.6f}}")
 
 import meshio
