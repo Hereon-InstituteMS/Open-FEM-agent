@@ -25,7 +25,9 @@ KNOWLEDGE = {
                 "Trilinos linear-solver wrappers (Epetra, AztecOO, Amesos, ML, "
                 "MueLu) for distributed-memory MPI runs.  Required by any "
                 "parallel Kratos analysis using iterative or AMG-preconditioned "
-                "solvers.  Pip install hint: KratosTrilinosApplication."
+                "solvers.  Not published as a PyPI wheel — obtain it by "
+                "building Kratos from source with `-DTRILINOS_APPLICATION=ON` "
+                "against an MPI-built Trilinos."
             ),
             "MetisApplication": (
                 "Metis-based mesh partitioner for MPI runs.  Used by the model-"
@@ -42,9 +44,9 @@ KNOWLEDGE = {
             ),
             "HDF5Application": (
                 "Parallel HDF5 I/O.  Provides HDF5OutputProcess and HDF5IO for "
-                "checkpointing, restart, and PETSc-friendly result storage.  "
-                "Used by long simulations and FSI restart workflows.  Pip "
-                "install hint: KratosHDF5Application."
+                "checkpointing and restart, plus XDMF/ParaView/VisIt-friendly "
+                "result storage.  Used by long simulations and FSI restart "
+                "workflows.  Pip install hint: KratosHDF5Application."
             ),
             "MedApplication": (
                 "MED file format I/O (Salome ecosystem).  Provides import/"
@@ -69,10 +71,12 @@ KNOWLEDGE = {
             ),
             "MappingApplication": (
                 "Inter-mesh field mapping for non-conforming or non-matching "
-                "discretisations.  Provides nearest-neighbour, barycentric, "
-                "and mortar mappers used by FSI partitioned solvers, "
-                "thermo-mechanical coupling, and CoSimulation.  Pip install "
-                "hint: KratosMappingApplication."
+                "discretisations.  Provides nearest-neighbour, nearest-element, "
+                "barycentric, RBF, and beam mappers used by FSI partitioned "
+                "solvers, thermo-mechanical coupling, and CoSimulation.  A "
+                "mortar mapper is upstream-flagged as under development and "
+                "should not be relied on yet.  Pip install hint: "
+                "KratosMappingApplication."
             ),
         },
         "analysis_utilities": {
@@ -84,37 +88,50 @@ KNOWLEDGE = {
                 "hint: KratosStatisticsApplication."
             ),
             "SystemIdentificationApplication": (
-                "System identification and inverse-problem parameter "
-                "estimation: fits material parameters or boundary-condition "
-                "magnitudes against measured response data.  Pip install "
+                "Sensor-based system identification.  Provides sensor types "
+                "(displacement, strain, sensor_view) and a "
+                "measurement_residual_response_function used for sensor "
+                "placement, damage detection, and parameter calibration "
+                "against measured response data.  Upstream README is empty "
+                "as of writing; see `custom_sensors/` and `custom_responses/` "
+                "for the actually-implemented surface area.  Pip install "
                 "hint: KratosSystemIdentificationApplication."
             ),
         },
-        "legacy_apps": {
+        "older_solid_and_contact_apps": {
             "SolidMechanicsApplication": (
-                "Legacy solid-mechanics application.  Predecessor of "
-                "StructuralMechanicsApplication — prefer the latter for new "
-                "work.  Still present upstream for backward compatibility "
-                "with older input decks.  Pip install hint: "
-                "KratosSolidMechanicsApplication."
+                "Older solid-mechanics application focused on FEM for solids, "
+                "shells and beams (per its upstream README).  "
+                "StructuralMechanicsApplication is the modern path that the "
+                "current Kratos generators target — prefer it for new work; "
+                "use SolidMechanicsApplication only if you are reading an "
+                "existing input deck that already targets it.  Pip install "
+                "hint: KratosSolidMechanicsApplication."
             ),
             "ContactMechanicsApplication": (
-                "Legacy contact-mechanics application.  Largely superseded "
-                "by ContactStructuralMechanicsApplication for the "
-                "structural-contact workflow.  Pip install hint: "
+                "Older contact-mechanics application.  For new structural-"
+                "contact workflows the established path is "
+                "ContactStructuralMechanicsApplication, which is what the "
+                "agent's contact generator already targets.  Upstream README "
+                "is empty; surface area is whatever lives under the app's "
+                "`custom_*/` directories.  Pip install hint: "
                 "KratosContactMechanicsApplication."
             ),
         },
         "pitfalls": [
-            "TrilinosApplication and MetisApplication ship in the MPI-parallel "
-            "Kratos build only; pip-installed serial wheels do not include them.",
-            "MappingApplication and MeshMovingApplication are *required* (not "
-            "optional) for partitioned FSI even if not named explicitly in "
-            "the user-facing JSON — the FSIApplication imports them.",
-            "Prefer StructuralMechanicsApplication over SolidMechanicsApplication "
-            "and ContactStructuralMechanicsApplication over ContactMechanicsApplication "
-            "for new analyses; the legacy apps are kept only for input-deck "
-            "backward compatibility and receive minimal maintenance.",
+            "TrilinosApplication is not published on PyPI; to get it you "
+            "must build Kratos from source with `-DTRILINOS_APPLICATION=ON` "
+            "against an MPI-built Trilinos.  MetisApplication does have a "
+            "PyPI wheel (KratosMetisApplication), but it is only useful in "
+            "an MPI-parallel run.",
+            "MappingApplication and MeshMovingApplication are *required* "
+            "(not optional) for partitioned FSI even if not named explicitly "
+            "in the user-facing JSON — `FSIApplication`'s "
+            "`partitioned_fsi_base_solver.py` imports both at runtime.",
+            "For new analyses prefer StructuralMechanicsApplication and "
+            "ContactStructuralMechanicsApplication over the older "
+            "SolidMechanicsApplication / ContactMechanicsApplication paths; "
+            "the current Kratos generators target the modern apps.",
         ],
     },
 }
