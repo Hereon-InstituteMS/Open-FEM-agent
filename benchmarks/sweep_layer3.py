@@ -517,18 +517,26 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
         return CellResult(cell, status=job.status, elapsed_s=elapsed,
                           error=(job.error or "")[:300])
 
-    # ── extract scalar from the LAST VTU (final time step / converged state)
-    vtu_files = sorted([f for f in backend.get_result_files(job) if f.suffix == ".vtu"])
+    # ── extract scalar from the LAST VTU (final time step / converged
+    # state).  We accept both the modern XML format (`.vtu`) and the
+    # legacy unstructured-grid format (`.vtk`) — pyvista reads both
+    # equally well, and KratosMultiphysics's `VtkOutput` writes the
+    # legacy form by default (no parameter to switch).  Without this
+    # widening, every Kratos template that *does* solve and produce
+    # an output would be silently scored as "no output" by the
+    # harness.
+    vtu_files = sorted([f for f in backend.get_result_files(job)
+                        if f.suffix in (".vtu", ".vtk")])
     scalar = None
     field_used = None
     if cell.field is not None:
-        # A cell that asked for a scalar but received no .vtu is a failure
-        # of the run even if the backend exited 0 — surface it instead of
-        # quietly returning status=completed with scalar=None.
+        # A cell that asked for a scalar but received no VTU/VTK is a
+        # failure of the run even if the backend exited 0 — surface it
+        # instead of quietly returning status=completed with scalar=None.
         if not vtu_files:
             return CellResult(
                 cell, status="no_vtu_output", elapsed_s=elapsed,
-                error=("backend reported completed but produced no .vtu in "
+                error=("backend reported completed but produced no .vtu / .vtk in "
                        f"{work_dir}; expected field {cell.field!r}"),
             )
         try:
