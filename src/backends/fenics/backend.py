@@ -33,7 +33,14 @@ def _find_fenics_python() -> Optional[Path]:
     """Locate the Python binary with dolfinx installed.
 
     FEniCS (dolfinx) is typically in a conda env, not in the server's venv.
-    We check: env var -> conda prefix -> common conda locations -> server Python.
+    Resolution order: ``FENICS_PYTHON`` env var -> ``FENICS_CONDA_PREFIX``
+    env var -> any conda env whose name contains "fenics" or "dolfinx"
+    (case-insensitive) -> the server's own Python.
+
+    The fuzzy name match covers the realistic naming spectrum users
+    create -- ``fenics``, ``fenicsx``, ``dolfinx``, ``ofa-fenicsx``,
+    ``my-fenics``, ``fenics-0.9``, etc.  A strictly-named ``fenics``
+    env was the old behavior and quietly missed every other naming.
     """
     import sys
 
@@ -47,15 +54,42 @@ def _find_fenics_python() -> Optional[Path]:
         if p.is_file():
             return p
 
-    # 3. Search common conda env locations
+    # 3. Search common conda env locations.  Match any env whose name
+    # contains "fenics" or "dolfinx" so the user doesn't have to name
+    # the env literally "fenics".  Iterating envs/* is cheap (filesystem
+    # listing only; no import-testing at startup).  We sort the listing
+    # so a machine with multiple matching envs always picks the same
+    # one (Path.iterdir order is not guaranteed).
     home = Path.home()
     for conda_dir in [home / "miniconda3", home / "miniforge3", home / "anaconda3"]:
-        p = conda_dir / "envs" / "fenics" / "bin" / "python"
-        if p.is_file():
-            return p
+        envs_dir = conda_dir / "envs"
+        if not envs_dir.is_dir():
+            continue
+        for env in sorted(envs_dir.iterdir()):
+            if not env.is_dir():
+                continue
+            name = env.name.lower()
+            if "fenics" in name or "dolfinx" in name:
+                p = env / "bin" / "python"
+                if p.is_file():
+                    return p
 
-    # 4. The Python running this server (may have dolfinx if installed in same env)
-    return Path(sys.executable)
+    # 4. Last resort: the server's own Python -- but only if it can
+    # actually import dolfinx.  Returning sys.executable unconditionally
+    # would make ``check_availability``'s "No Python with dolfinx
+    # found" branch dead code; we'd always reach the subprocess import
+    # check and report a less actionable error.
+    import subprocess
+    try:
+        r = subprocess.run(
+            [sys.executable, "-c", "import dolfinx"],
+            capture_output=True, timeout=5,
+        )
+        if r.returncode == 0:
+            return Path(sys.executable)
+    except Exception:
+        pass
+    return None
 
 
 # ---- Physics capabilities (used by supported_physics) ----
@@ -207,8 +241,15 @@ class FenicsBackend(SolverBackend):
 
     def check_availability(self) -> tuple[BackendStatus, str]:
         python = _find_fenics_python()
+        hint = (
+            "  Set one of:\n"
+            "    FENICS_PYTHON=/path/to/conda/envs/<env>/bin/python  (explicit, recommended)\n"
+            "    FENICS_CONDA_PREFIX=/path/to/conda/envs/<env>        (env root)\n"
+            "  Or rename your env to one whose name contains 'fenics' or 'dolfinx'\n"
+            "  (auto-detected in ~/miniconda3, ~/miniforge3, ~/anaconda3 under envs/)."
+        )
         if not python:
-            return BackendStatus.NOT_INSTALLED, "No Python with dolfinx found"
+            return BackendStatus.NOT_INSTALLED, "No Python with dolfinx found.\n" + hint
 
         # Quick import check
         import subprocess
@@ -221,9 +262,12 @@ class FenicsBackend(SolverBackend):
                 ver = result.stdout.strip()
                 return BackendStatus.AVAILABLE, f"dolfinx {ver} at {python}"
             else:
-                return BackendStatus.NOT_INSTALLED, f"dolfinx import failed: {result.stderr.strip()}"
+                return BackendStatus.NOT_INSTALLED, (
+                    f"dolfinx import failed at {python}: "
+                    f"{result.stderr.strip()}\n" + hint
+                )
         except Exception as e:
-            return BackendStatus.NOT_INSTALLED, f"Check failed: {e}"
+            return BackendStatus.NOT_INSTALLED, f"Check failed at {python}: {e}\n" + hint
 
     @staticmethod
     def _convert_xdmf_to_vtu(work_dir: Path):
