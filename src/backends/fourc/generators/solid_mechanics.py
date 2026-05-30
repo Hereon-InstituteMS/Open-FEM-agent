@@ -267,17 +267,17 @@ class SolidMechanicsGenerator(BaseGenerator):
                 "MAT_crystal_plasticity": {
                     "description": (
                         "Single-crystal plasticity with dislocation-density based hardening and "
-                        "optional deformation twinning.  Lattice families: FCC, BCC, HCP, D019, L10 "
-                        "(LAT key, default FCC).  Slip- and twin-system parameters are given as "
-                        "vectors sized by NUMSLIPSETS / NUMTWINSETS — entries map to system sets "
-                        "via SLIPSETMEMBERS / TWINSETMEMBERS."
+                        "optional deformation twinning.  Lattice families accepted by the runtime: "
+                        "FCC, BCC, D019, L10 (LAT key, default FCC).  The input parser's own "
+                        "description string advertises HCP as well, but the constructor sanity "
+                        "check rejects 'HCP' with FOUR_C_THROW — use D019 for hexagonal lattices."
                     ),
                     "parameters": (
                         # elastic + Newton tolerance
                         "TOL, YOUNG, NUE, DENS, "
                         # crystal lattice
                         "LAT, CTOA, ABASE, "
-                        # slip-system definition (vector sizes follow NUMSLIPSETS)
+                        # slip-system definition
                         "NUMSLIPSYS, NUMSLIPSETS, SLIPSETMEMBERS, SLIPRATEEXP, GAMMADOTSLIPREF, "
                         "DISDENSINIT, DISGENCOEFF, DISDYNRECCOEFF, TAUY0, MFPSLIP, SLIPHPCOEFF, "
                         "SLIPBYTWIN, "
@@ -292,12 +292,20 @@ class SolidMechanicsGenerator(BaseGenerator):
                         "slip-twin and twin-twin coupling, multiple lattice types"
                     ),
                     "pitfalls": (
-                        "Vector parameters must have exact size NUMSLIPSETS (or NUMTWINSETS) — "
-                        "wrong size triggers a 4C input parser error.  SLIPSETMEMBERS uses "
-                        "1-based indices into NUMSLIPSETS.  Twinning is optional: leave "
-                        "NUMTWINSYS=NUMTWINSETS=0 and omit the TWIN* / GAMMADOTTWINREF / TAUT0 / "
-                        "MFPTWIN / TWINHPCOEFF / TWINBYSLIP / TWINBYTWIN vectors (their "
-                        "default is the empty vector) for pure slip plasticity."
+                        "Vector-size rule depends on the parameter (two distinct sizing axes):\n"
+                        "  - one entry per physical *system* (size = NUMSLIPSYS or NUMTWINSYS): "
+                        "SLIPSETMEMBERS, TWINSETMEMBERS — these are 1-based indices into the "
+                        "set table (range 1..NUMSLIPSETS or 1..NUMTWINSETS) saying which set "
+                        "each individual slip/twin system belongs to.\n"
+                        "  - one entry per *set* (size = NUMSLIPSETS or NUMTWINSETS): every "
+                        "other slip/twin vector (SLIPRATEEXP, GAMMADOTSLIPREF, DISDENSINIT, "
+                        "DISGENCOEFF, DISDYNRECCOEFF, TAUY0, MFPSLIP, SLIPHPCOEFF, SLIPBYTWIN "
+                        "and their TWIN-side counterparts TWINRATEEXP, GAMMADOTTWINREF, TAUT0, "
+                        "MFPTWIN, TWINHPCOEFF, TWINBYSLIP, TWINBYTWIN).\n"
+                        "Mixing these two sizes is a common error — NUMSLIPSYS usually exceeds "
+                        "NUMSLIPSETS (e.g. FCC has 12 systems often in 1 set).  Twinning is "
+                        "optional: leave NUMTWINSYS=NUMTWINSETS=0 and omit every TWIN-side "
+                        "vector (they all have parser defaults) for pure slip plasticity."
                     ),
                 },
             },
