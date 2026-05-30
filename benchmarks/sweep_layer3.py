@@ -342,6 +342,108 @@ MATRIX: dict[str, list[Cell]] = {
         Cell("fourc",   "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
     ],
+
+    # ── HARD PHYSICS rows ────────────────────────────────────────────
+    # These exercise the saddle-point / nonlinear / mixed-formulation
+    # parts of each backend's catalog.  Far fewer cells reach a useful
+    # scalar than the linear-elliptic rows above; the value of these
+    # rows is precisely that the failure modes are now visible on
+    # every sweep run.
+
+    "STOKES": [
+        # 2D Stokes flow.  No standardised canonical problem across
+        # the templates yet, so the cross-cell comparison is
+        # qualitative.  Expected scalar (when reachable) is the maximum
+        # velocity magnitude, which `core.post_processing.post_process_file`
+        # produces via `np.linalg.norm(arr, axis=1)` for vector fields.
+
+        # skfem's `stokes/2d` template raises
+        # `ValueError: Quadrature mismatch: trial and test functions
+        # should have same number of integration points` — the
+        # Taylor-Hood mixed basis is assembled with mismatched
+        # quadrature orders between velocity P2 and pressure P1.
+        # Template bug.
+        Cell("skfem",   "stokes", "2d", {"nx": 32, "ny": 32},
+             field="velocity", expected=None, rtol=0.5),
+        # NGSolve's `stokes/2d` template runs to the solver step then
+        # the MKL Pardiso direct solver raises
+        # `RuntimeError: MKL Pardiso error in phase 33: -4` (a
+        # numerical singularity / inertia mismatch from the
+        # saddle-point system).  Template needs either a different
+        # preconditioner / Schur-complement strategy or a stabilised
+        # mixed element pair.
+        Cell("ngsolve", "stokes", "2d", {"nx": 32, "ny": 32},
+             field="velocity", expected=None, rtol=0.5),
+        # FEniCSx's `stokes/2d` template still uses
+        # `ufl.VectorElement(...)`, which was removed from UFL in the
+        # dolfinx-0.10 stack on this machine.  The new path is
+        # `basix.ufl.element(...)` + a single mixed `functionspace`.
+        # Template targets an older dolfinx API.
+        Cell("fenics",  "stokes", "2d", {"nx": 32, "ny": 32},
+             field="velocity", expected=None, rtol=0.5),
+        # deal.II Stokes — same conda-forge dealii 9.1.1 + TBB
+        # header-drift situation as the elliptic rows.  Compile fails
+        # before reaching the assembly.
+        Cell("dealii",  "stokes", "2d", {},
+             field="velocity", expected=None, rtol=0.5),
+    ],
+
+    "NAVIER_STOKES": [
+        # Lid-driven cavity at Re=100 — the canonical CFD validation
+        # benchmark (Ghia, Ghia & Shin 1982).  Reference centre-line
+        # u_x ≈ -0.21 at the lower wall; max |u| is order unity by
+        # construction (lid velocity = 1).  Most working templates
+        # report the maximum velocity magnitude across nodes.
+
+        # skfem's `navier_stokes/2d` template raises a TypeError /
+        # AttributeError at solve.py runtime — driver-script bug; the
+        # boundary-tag pattern is the same as the linear_elasticity
+        # template before its fix and probably needs the same
+        # `with_boundaries({...})` treatment.
+        Cell("skfem",   "navier_stokes", "2d", {"Re": 100, "nx": 32},
+             field="velocity", expected=None, rtol=0.5),
+        # NGSolve's NS template runs cleanly on the lid-driven cavity
+        # and writes `velocity` and `pressure` fields; the working
+        # cell on this machine reports max |u| ~ 1.0 (lid speed).
+        Cell("ngsolve", "navier_stokes", "2d", {"Re": 100, "nx": 32},
+             field="velocity", expected=None, rtol=0.5),
+        # FEniCSx NS template runs and writes `velocity`; same
+        # qualitative expectation (max |u| around the lid).
+        Cell("fenics",  "navier_stokes", "2d", {"Re": 100, "nx": 32},
+             field="velocity", expected=None, rtol=0.5),
+        # deal.II NS — same conda-forge dealii 9.1.1 + TBB
+        # build-fail situation; cell will report `failed` until that
+        # env is rebuilt.
+        Cell("dealii",  "navier_stokes", "2d", {},
+             field="velocity", expected=None, rtol=0.5),
+    ],
+
+    "HYPERELASTICITY": [
+        # Large-deformation Neo-Hookean elasticity.  No standardised
+        # canonical problem across backends — each template ships its
+        # own boundary conditions / geometry.  Comparison metric is
+        # the max displacement magnitude where extractable.
+
+        # skfem `hyperelasticity/2d` raises during the Newton loop —
+        # template needs review (probably the same boundary-tag bug
+        # the linear_elasticity template had, now exposed in a
+        # nonlinear context).
+        Cell("skfem",   "hyperelasticity", "2d", {"E": 1000, "nu": 0.3},
+             field="displacement", expected=None, rtol=0.5),
+        # NGSolve `hyperelasticity/2d` raises during the Newton loop
+        # — needs review.
+        Cell("ngsolve", "hyperelasticity", "2d", {"E": 1000, "nu": 0.3},
+             field="displacement", expected=None, rtol=0.5),
+        # FEniCSx `hyperelasticity/3d` runs (max displacement order
+        # of magnitude depends on the demo's applied displacement BC).
+        # The 2D variant is not in the catalog, so we use 3D here.
+        Cell("fenics",  "hyperelasticity", "3d", {"E": 1000, "nu": 0.3},
+             field="displacement", expected=None, rtol=0.5),
+        # deal.II hyperelasticity — same conda-forge build-fail
+        # situation as the other deal.II rows.
+        Cell("dealii",  "hyperelasticity", "3d", {},
+             field="displacement", expected=None, rtol=0.5),
+    ],
 }
 
 
