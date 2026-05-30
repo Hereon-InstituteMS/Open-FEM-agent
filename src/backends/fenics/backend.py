@@ -57,13 +57,15 @@ def _find_fenics_python() -> Optional[Path]:
     # 3. Search common conda env locations.  Match any env whose name
     # contains "fenics" or "dolfinx" so the user doesn't have to name
     # the env literally "fenics".  Iterating envs/* is cheap (filesystem
-    # listing only; no import-testing at startup).
+    # listing only; no import-testing at startup).  We sort the listing
+    # so a machine with multiple matching envs always picks the same
+    # one (Path.iterdir order is not guaranteed).
     home = Path.home()
     for conda_dir in [home / "miniconda3", home / "miniforge3", home / "anaconda3"]:
         envs_dir = conda_dir / "envs"
         if not envs_dir.is_dir():
             continue
-        for env in envs_dir.iterdir():
+        for env in sorted(envs_dir.iterdir()):
             if not env.is_dir():
                 continue
             name = env.name.lower()
@@ -72,8 +74,22 @@ def _find_fenics_python() -> Optional[Path]:
                 if p.is_file():
                     return p
 
-    # 4. The Python running this server (may have dolfinx if installed in same env)
-    return Path(sys.executable)
+    # 4. Last resort: the server's own Python -- but only if it can
+    # actually import dolfinx.  Returning sys.executable unconditionally
+    # would make ``check_availability``'s "No Python with dolfinx
+    # found" branch dead code; we'd always reach the subprocess import
+    # check and report a less actionable error.
+    import subprocess
+    try:
+        r = subprocess.run(
+            [sys.executable, "-c", "import dolfinx"],
+            capture_output=True, timeout=5,
+        )
+        if r.returncode == 0:
+            return Path(sys.executable)
+    except Exception:
+        pass
+    return None
 
 
 # ---- Physics capabilities (used by supported_physics) ----
