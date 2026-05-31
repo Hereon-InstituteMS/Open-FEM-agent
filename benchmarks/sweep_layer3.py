@@ -517,30 +517,44 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
         return CellResult(cell, status=job.status, elapsed_s=elapsed,
                           error=(job.error or "")[:300])
 
-    # ── extract scalar from the LAST VTU (final time step / converged
-    # state).  We accept both the modern XML format (`.vtu`) and the
-    # legacy unstructured-grid format (`.vtk`) — pyvista reads both
-    # equally well, and KratosMultiphysics's `VtkOutput` writes the
-    # legacy form by default (no parameter to switch).  Without this
-    # widening, every Kratos template that *does* solve and produce
-    # an output would be silently scored as "no output" by the
-    # harness.
-    vtu_files = sorted([f for f in backend.get_result_files(job)
-                        if f.suffix in (".vtu", ".vtk")])
+    # ── extract scalar from the LAST output snapshot (final time step /
+    # converged state).  We accept both the modern XML format (`.vtu`)
+    # and the legacy unstructured-grid format (`.vtk`) — pyvista reads
+    # both equally well, and KratosMultiphysics's `VtkOutput` writes
+    # the legacy form by default (no parameter to switch).  Without
+    # this widening, every Kratos template that *does* solve and
+    # produce an output would be silently scored as "no output" by
+    # the harness.
+    #
+    # Sort numerically by trailing step index, NOT lexicographically:
+    # backends like Kratos emit `Structure_0_1.vtk, Structure_0_2.vtk,
+    # ..., Structure_0_10.vtk`, where lexicographic sort would place
+    # `_10` *before* `_9` and pick the wrong snapshot as "the last".
+    import re as _re
+    def _step_key(p):
+        # Extract the last contiguous integer run in the stem; fall back
+        # to 0 for files with no digits so they sort first.
+        m = _re.findall(r"\d+", p.stem)
+        return (int(m[-1]) if m else 0, p.stem)
+    output_files = sorted(
+        (f for f in backend.get_result_files(job)
+         if f.suffix in (".vtu", ".vtk")),
+        key=_step_key,
+    )
     scalar = None
     field_used = None
     if cell.field is not None:
         # A cell that asked for a scalar but received no VTU/VTK is a
         # failure of the run even if the backend exited 0 — surface it
         # instead of quietly returning status=completed with scalar=None.
-        if not vtu_files:
+        if not output_files:
             return CellResult(
                 cell, status="no_vtu_output", elapsed_s=elapsed,
                 error=("backend reported completed but produced no .vtu / .vtk in "
                        f"{work_dir}; expected field {cell.field!r}"),
             )
         try:
-            pp = post_process_file(vtu_files[-1], plot_dir=work_dir, plot_fields=False)
+            pp = post_process_file(output_files[-1], plot_dir=work_dir, plot_fields=False)
             available = [f.name for f in pp.fields]
             for f in pp.fields:
                 if f.name == cell.field or f.name.lower() == cell.field.lower():
