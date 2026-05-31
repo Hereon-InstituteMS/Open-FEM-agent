@@ -170,29 +170,37 @@ def enumerate_templates() -> list[Template]:
         #    module returned by list_generators() has its own
         #    list_variants() that yields per-variant metadata dicts.
         #    Build (module, variant_name) Templates directly here and
-        #    skip the generic key-split path below.
+        #    skip the generic key-split path below — but only if the
+        #    expected pair of helpers (list_generators + get_generator)
+        #    is actually present.  If the import succeeds but either
+        #    helper is missing (e.g. an upstream rename), fall through
+        #    to the generic key-split paths below rather than silently
+        #    enumerating zero templates.
         if not keys and name == "fourc":
             try:
                 mod = __import__(
                     f"backends.{name}.generators",
                     fromlist=["list_generators", "get_generator"],
                 )
-                if hasattr(mod, "list_generators") and hasattr(mod, "get_generator"):
-                    for module_key in mod.list_generators():
-                        gen = mod.get_generator(module_key)
-                        if not hasattr(gen, "list_variants"):
-                            continue
-                        for v in gen.list_variants():
-                            vname = v["name"] if isinstance(v, dict) else str(v)
-                            out.append(Template(
-                                backend=name,
-                                key=f"{module_key}/{vname}",
-                                physics=module_key,
-                                variant=vname,
-                            ))
+            except ModuleNotFoundError:
+                mod = None
+            if mod is not None and (
+                hasattr(mod, "list_generators")
+                and hasattr(mod, "get_generator")
+            ):
+                for module_key in mod.list_generators():
+                    gen = mod.get_generator(module_key)
+                    if not hasattr(gen, "list_variants"):
+                        continue
+                    for v in gen.list_variants():
+                        vname = v["name"] if isinstance(v, dict) else str(v)
+                        out.append(Template(
+                            backend=name,
+                            key=f"{module_key}/{vname}",
+                            physics=module_key,
+                            variant=vname,
+                        ))
                 continue  # 4C done — don't fall through
-            except (ModuleNotFoundError, AttributeError):
-                pass
 
         # 3. probe-by-error for backends without a uniform registry.
         #    Two distinct error formats exist:
@@ -351,18 +359,42 @@ def render_markdown(results: list[Result]) -> str:
     lines: list[str] = []
     lines.append("# Probe of every catalog template\n")
     lines.append(f"_Generated {time.strftime('%Y-%m-%d %H:%M:%S')} on this machine._\n")
-    # summary line
+    # Count rules: each stage's column is `True` strictly when the
+    # check actually ran AND passed.  A cell whose stage was skipped
+    # (e.g. validate_ok is None on `--stage 1`) is NOT counted as a
+    # success — that would let the summary line claim "0 validate-OK"
+    # for a stage-1 run and look like every template just failed
+    # validation, when in fact validation was never performed.  We
+    # therefore also report the per-stage *skipped* count when nonzero
+    # so the reader can tell "not run" from "ran and failed".
     total = len(results)
     g = sum(1 for r in results if r.gen_ok)
-    v = sum(1 for r in results if r.validate_ok)
+    v_ok = sum(1 for r in results if r.validate_ok is True)
+    v_skipped = sum(1 for r in results if r.validate_ok is None)
     c = sum(1 for r in results if r.run_status == "completed")
+    r_skipped = sum(1 for r in results if r.run_status is None)
     vtu = sum(1 for r in results if r.has_vtu)
-    lines.append(f"**Summary** — {total} templates probed: "
-                 f"{g} generate-OK, {v} validate-OK, "
-                 f"{c} run-completed, {vtu} produced a VTU.\n")
+    vtu_skipped = sum(1 for r in results if r.has_vtu is None)
+
+    def _fmt(label, ok, skipped):
+        if skipped:
+            return f"{ok} {label} ({skipped} not probed at this stage)"
+        return f"{ok} {label}"
+
+    lines.append(
+        "**Summary** — "
+        + f"{total} templates probed: "
+        + f"{g} generate-OK, "
+        + _fmt("validate-OK", v_ok, v_skipped)
+        + ", "
+        + _fmt("run-completed", c, r_skipped)
+        + ", "
+        + _fmt("produced a VTU", vtu, vtu_skipped)
+        + ".\n"
+    )
     for backend, rs in sorted(by_backend.items()):
         bg = sum(1 for r in rs if r.gen_ok)
-        bv = sum(1 for r in rs if r.validate_ok)
+        bv = sum(1 for r in rs if r.validate_ok is True)
         bc = sum(1 for r in rs if r.run_status == "completed")
         bvtu = sum(1 for r in rs if r.has_vtu)
         lines.append(f"\n## {backend} — {len(rs)} templates "
@@ -430,8 +462,11 @@ async def main():
 
     # ── final one-line summary
     total = len(results)
+    # Same "True strictly, not falsy" rule as the markdown renderer
+    # so `--stage 1` doesn't appear to report "0 validated" when in
+    # fact validation was simply not performed.
     g = sum(1 for r in results if r.gen_ok)
-    v = sum(1 for r in results if r.validate_ok)
+    v = sum(1 for r in results if r.validate_ok is True)
     c = sum(1 for r in results if r.run_status == "completed")
     vtu = sum(1 for r in results if r.has_vtu)
     print(f"\nSUMMARY  total={total}  gen={g}  val={v}  run={c}  vtu={vtu}")
