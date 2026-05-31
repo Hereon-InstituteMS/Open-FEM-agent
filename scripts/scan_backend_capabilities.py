@@ -199,12 +199,147 @@ def scan_kratos() -> BackendCapabilities:
     return cap
 
 
+# ── 4C scanner ─────────────────────────────────────────────────────────
+
+
+def scan_fourc() -> BackendCapabilities:
+    """Walk the 4C source tree to enumerate physics modules,
+    registered materials, and input parser definitions.
+
+    Unlike Kratos (pip-installed, introspect Python), 4C is a C++
+    project we have on disk.  We grep the canonical registry files
+    rather than parse C++ AST:
+
+      * `src/global_legacy_module/4C_global_legacy_module_validmaterials.cpp`
+        contains every material declaration via
+        `group("MAT_<name>", {...})` calls — one `MAT_*` per
+        material the input parser will accept.
+
+      * `src/core/legacy_enum_definitions/4C_legacy_enum_definitions_materials.cpp`
+        carries the matching `Core::Materials::m_<name>` C++ enum
+        symbols; the two must stay in sync (a mismatch is itself a
+        4C-internal bug worth surfacing in the scan).
+
+      * `src/<module>/` directories under `src/` correspond to
+        physics modules.  We skip generic-infrastructure
+        directories (`core`, `config`, `deal_ii`, ...) and report
+        the rest as the "modules" capability under `other`.
+
+      * `src/inpar/*.cpp` defines input keywords and
+        `ConditionDefinition` entries.  We extract the section-name
+        string literals each file registers.
+
+    The 4C source root is taken from `FOURC_ROOT` env var or the
+    repo-relative `~/Schreibtisch/4C-src/4C` location (matching
+    `sweep_layer3.py` discovery).
+    """
+    import os
+    import re
+
+    cap = BackendCapabilities(backend="fourc")
+
+    candidates = [
+        os.environ.get("FOURC_ROOT", ""),
+        str(Path.home() / "Schreibtisch/4C-src/4C"),
+        str(Path.home() / "4C"),
+    ]
+    root: Path | None = None
+    for c in candidates:
+        if c and (Path(c) / "src").is_dir():
+            root = Path(c)
+            break
+    if root is None:
+        cap.notes.append("4C source root not found; tried FOURC_ROOT + "
+                         "~/Schreibtisch/4C-src/4C + ~/4C")
+        return cap
+    cap.notes.append(f"source_root={root}")
+
+    # ── 1. modules: every src/<dir> that looks like a physics module
+    src = root / "src"
+    skip = {
+        "core", "config", "module_registry", "global_data",
+        "global_legacy_module", "deal_ii", "legacy",
+    }
+    modules: list[str] = []
+    for child in sorted(src.iterdir()):
+        if not child.is_dir():
+            continue
+        if child.name in skip:
+            continue
+        if not (child / "CMakeLists.txt").exists():
+            continue
+        modules.append(child.name)
+    cap.other["modules"] = modules
+
+    # ── 2. materials: every MAT_<name> in the valid-materials registry
+    mats_file = src / "global_legacy_module" / "4C_global_legacy_module_validmaterials.cpp"
+    if mats_file.is_file():
+        txt = mats_file.read_text(encoding="utf-8", errors="replace")
+        materials = sorted(set(re.findall(r'group\("(MAT_[A-Za-z_0-9]+)"', txt)))
+        cap.constitutive_laws = materials
+        cap.notes.append(f"materials_source={mats_file.relative_to(root)}")
+    else:
+        cap.notes.append(f"materials_file_missing: {mats_file}")
+
+    # ── 3. material enum symbols (the C++ side of the same table)
+    enum_file = src / "core" / "legacy_enum_definitions" / "4C_legacy_enum_definitions_materials.cpp"
+    if enum_file.is_file():
+        txt = enum_file.read_text(encoding="utf-8", errors="replace")
+        enum_syms = sorted(set(re.findall(r'\bm_([A-Za-z_0-9]+)\b', txt)))
+        cap.other["material_enum_symbols"] = enum_syms
+
+    # ── 4. ConditionDefinition string literals.  In 4C the type is
+    # written as `Core::Conditions::ConditionDefinition`, and the call
+    # site is one of:
+    #     ConditionDefinition tbc_turb_inflow("DESIGN ...", ...)
+    #     ConditionDefinition(\n   "DESIGN ...", ...)
+    #     ... = ConditionDefinition("DESIGN ...", ...)
+    # So the regex allows an optional variable-name identifier and
+    # arbitrary whitespace (incl. newlines) between the keyword and
+    # the string literal.  Walk the entire 4C src tree, not just
+    # src/inpar/, because beaminteraction and others register their
+    # own conditions outside inpar.
+    cond_re = re.compile(
+        r'ConditionDefinition\s*(?:[A-Za-z_]\w*\s*)?\(\s*"([^"]+)"',
+        re.DOTALL,
+    )
+    sections: set[str] = set()
+    condition_files: list[str] = []
+    for p in sorted(src.rglob("*.cpp")):
+        try:
+            txt = p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        if "ConditionDefinition" not in txt:
+            continue
+        hits = cond_re.findall(txt)
+        if hits:
+            sections.update(hits)
+            condition_files.append(str(p.relative_to(src)))
+    cap.conditions = sorted(sections)
+    cap.other["condition_source_files"] = condition_files
+
+    # ── 5. element-registration directories under src/*_ele/
+    elem_modules: list[str] = []
+    for p in sorted(src.glob("*_ele")):
+        if p.is_dir() and (p / "CMakeLists.txt").exists():
+            elem_modules.append(p.name)
+    cap.other["element_modules"] = elem_modules
+
+    # 4C has no global variable registry to enumerate the way Kratos
+    # does — variables in 4C are field names inside each physics
+    # module's element implementation.  Per-module field extraction
+    # is a deeper-scan follow-up.
+    return cap
+
+
 # ── dispatch ───────────────────────────────────────────────────────────
 
 
 SCANNERS = {
     "kratos": scan_kratos,
-    # 4C, fenics, dealii, skfem, ngsolve, dune scanners land in
+    "fourc": scan_fourc,
+    # fenics, dealii, skfem, ngsolve, dune scanners land in
     # follow-up PRs.  Each backend gets its own focused function
     # following the same pattern.
 }
