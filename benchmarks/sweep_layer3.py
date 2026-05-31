@@ -544,13 +544,24 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     # ..., Structure_0_10.vtk`, where lexicographic sort would place
     # `_10` *before* `_9` and pick the wrong snapshot as "the last".
     # Within the same step, prefer the most-PyVista-stable format
-    # (`.vtu` > `.vtk` > `.xdmf` > `.pvd`) so two formats emitted
-    # for the same step never pick a less-supported container.
+    # (`.vtu` > `.vtk` > `.xdmf`) so two formats emitted for the
+    # same step never pick a less-supported container.
     import re as _re
     # Listed in preference order so the error message text and the
     # `_SUFFIX_PRIORITY` tiebreaker share a single, internally-
-    # consistent ordering: `.vtu` > `.vtk` > `.xdmf` > `.pvd`.
-    _OUTPUT_SUFFIXES = (".vtu", ".vtk", ".xdmf", ".pvd")
+    # consistent ordering: `.vtu` > `.vtk` > `.xdmf`.
+    # `.pvd` is intentionally NOT accepted here: PyVista reads a `.pvd`
+    # collection into a `MultiBlock`, not a single `DataSet`, and
+    # `core.post_processing.post_process_file()` assumes a flat
+    # `mesh.point_data` API.  Including `.pvd` in this set would
+    # silently turn every cell that emits a `.pvd` index into a
+    # `postproc_failed` even though a perfectly good `.vtu` partial
+    # sits next to it.  Re-enabling `.pvd` here is blocked on
+    # post-processing learning to pick a block / time-step from a
+    # MultiBlock collection (a separate piece of work in
+    # core/post_processing.py).  Individual `.vtu` partials referenced
+    # by a `.pvd` are still picked up via the `.vtu` entry below.
+    _OUTPUT_SUFFIXES = (".vtu", ".vtk", ".xdmf")
     _SUFFIX_PRIORITY = {suf: i for i, suf in enumerate(_OUTPUT_SUFFIXES)}
 
     def _step_key(p):
@@ -582,7 +593,7 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     if cell.field is not None:
         # A cell that asked for a scalar but received no output file
         # in any of the formats in `_OUTPUT_SUFFIXES` (currently
-        # .vtu / .vtk / .xdmf / .pvd) is a failure of the run even if
+        # .vtu / .vtk / .xdmf — see comment block above) is a failure of the run even if
         # the backend exited 0 — surface it instead of quietly
         # returning status=completed with scalar=None.
         if not output_files:
