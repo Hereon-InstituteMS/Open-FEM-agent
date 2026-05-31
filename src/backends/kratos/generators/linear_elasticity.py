@@ -224,6 +224,15 @@ for j in range(ny + 1):
     n = mp.Nodes[node_id(0, j)]
     n.Fix(KM.DISPLACEMENT_X)
     n.Fix(KM.DISPLACEMENT_Y)
+    # Set the Dirichlet value explicitly to 0.0 alongside the Fix()
+    # call.  Kratos's `Fix(...)` flags the DOF as constrained but
+    # does not by itself prescribe the value (the solution-step
+    # value defaults to 0.0 for fresh nodes, but for nodes that have
+    # already participated in an earlier solve step on the same
+    # ModelPart the prior value persists — a real bug when the
+    # template is re-used inside a larger workflow).
+    n.SetSolutionStepValue(KM.DISPLACEMENT_X, 0.0)
+    n.SetSolutionStepValue(KM.DISPLACEMENT_Y, 0.0)
 
 j_mid = ny // 2
 tip_node = mp.Nodes[node_id(nx, j_mid)]

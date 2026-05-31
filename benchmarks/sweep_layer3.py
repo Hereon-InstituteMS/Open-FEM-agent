@@ -284,7 +284,7 @@ MATRIX: dict[str, list[Cell]] = {
         # boundary tags and then calls `ib.get_dofs("left")`, which
         # raises; and (b) even if (a) is fixed, the template writes a
         # `results_summary.json` only, never a .vtu, so the sweep would
-        # then transition from `failed` to `no_vtu_output`.  Both are
+        # then transition from `failed` to `no_output_file`.  Both are
         # template bugs to address upstream.  The cell is kept so the
         # matrix surfaces the gap on every run.
         Cell("skfem",   "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
@@ -309,7 +309,7 @@ MATRIX: dict[str, list[Cell]] = {
         # placeholder that prints "StructuralMechanicsApplication
         # available" and writes a JSON summary instead of actually running
         # a structural analysis.  The cell completes but produces no .vtu,
-        # so the sweep reports "no_vtu_output" — which is precisely the
+        # so the sweep reports "no_output_file" — which is precisely the
         # right signal: validation passes superficially, runtime does
         # nothing useful.  Replacement with a real Kratos cantilever
         # analysis is a follow-up.
@@ -549,7 +549,7 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
         # instead of quietly returning status=completed with scalar=None.
         if not output_files:
             return CellResult(
-                cell, status="no_vtu_output", elapsed_s=elapsed,
+                cell, status="no_output_file", elapsed_s=elapsed,
                 error=("backend reported completed but produced no .vtu / .vtk in "
                        f"{work_dir}; expected field {cell.field!r}"),
             )
