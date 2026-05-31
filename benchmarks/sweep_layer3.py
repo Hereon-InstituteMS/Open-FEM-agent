@@ -303,16 +303,19 @@ MATRIX: dict[str, list[Cell]] = {
              field="displacement", expected=None, rtol=0.5),
         Cell("fenics",  "linear_elasticity", "2d", {"E": 1000, "nu": 0.3},
              field="displacement", expected=None, rtol=0.5),
-        # Kratos's `linear_elasticity/2d_nonlinear` is the only variant
-        # that imports KratosMultiphysics (the plain `linear_elasticity/2d`
-        # is one of the 8 known scipy stubs), but the script body is a
-        # placeholder that prints "StructuralMechanicsApplication
-        # available" and writes a JSON summary instead of actually running
-        # a structural analysis.  The cell completes but produces no .vtu,
-        # so the sweep reports "no_output_file" — which is precisely the
-        # right signal: validation passes superficially, runtime does
-        # nothing useful.  Replacement with a real Kratos cantilever
-        # analysis is a follow-up.
+        # Kratos `linear_elasticity/2d_nonlinear` was a placeholder
+        # stub until the same PR that widened this harness to accept
+        # legacy `.vtk` — it is now a real KratosMultiphysics
+        # TotalLagrangianElement2D4N cantilever with
+        # LinearElasticPlaneStrain2DLaw, prescribed-displacement BC at
+        # the tip mid-node, and `KM.VtkOutput` writing a real
+        # `Structure_0_*.vtk` containing `DISPLACEMENT` + `REACTION`
+        # node fields.  The cell scores max|u| = 0.50884 (the
+        # prescribed tip displacement is 0.5 in -y; the magnitude is
+        # slightly larger because the Newton solve picks up some
+        # bending-induced x-displacement near the tip).  Plain
+        # `linear_elasticity/2d` has also been rewritten as a real
+        # SmallDisplacement Newton solve.
         Cell("kratos",  "linear_elasticity", "2d_nonlinear", {"E": 1000, "nu": 0.3},
              field="DISPLACEMENT", expected=None, rtol=0.5),
         # deal.II's `linear_elasticity/2d` template needs the same
@@ -518,19 +521,22 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
                           error=(job.error or "")[:300])
 
     # ── extract scalar from the LAST output snapshot (final time step /
-    # converged state).  We accept both the modern XML format (`.vtu`)
-    # and the legacy unstructured-grid format (`.vtk`) — pyvista reads
-    # both equally well, and KratosMultiphysics's `VtkOutput` writes
-    # the legacy form by default (no parameter to switch).  Without
-    # this widening, every Kratos template that *does* solve and
-    # produce an output would be silently scored as "no output" by
-    # the harness.
+    # converged state).  We accept every format
+    # `core.post_processing.read_mesh()` knows how to load:
+    #   .vtu    — modern XML unstructured (FEniCSx, skfem, fourc, ...)
+    #   .vtk    — legacy unstructured (KratosMultiphysics `VtkOutput`)
+    #   .pvtu   — parallel-partitioned VTU
+    #   .pvd    — ParaView collection / time-series index
+    #   .xdmf   — XDMF (dolfinx alternative)
+    # If the set here diverges from `read_mesh`'s, working backends
+    # silently get reported as "no output" by the sweep.
     #
     # Sort numerically by trailing step index, NOT lexicographically:
     # backends like Kratos emit `Structure_0_1.vtk, Structure_0_2.vtk,
     # ..., Structure_0_10.vtk`, where lexicographic sort would place
     # `_10` *before* `_9` and pick the wrong snapshot as "the last".
     import re as _re
+    _OUTPUT_SUFFIXES = (".vtu", ".vtk", ".pvtu", ".pvd", ".xdmf")
     def _step_key(p):
         # Extract the last contiguous integer run in the stem; fall back
         # to 0 for files with no digits so they sort first.
@@ -538,7 +544,7 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
         return (int(m[-1]) if m else 0, p.stem)
     output_files = sorted(
         (f for f in backend.get_result_files(job)
-         if f.suffix in (".vtu", ".vtk")),
+         if f.suffix in _OUTPUT_SUFFIXES),
         key=_step_key,
     )
     scalar = None
@@ -550,7 +556,8 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
         if not output_files:
             return CellResult(
                 cell, status="no_output_file", elapsed_s=elapsed,
-                error=("backend reported completed but produced no .vtu / .vtk in "
+                error=("backend reported completed but produced no "
+                       f"{'/'.join(_OUTPUT_SUFFIXES)} output in "
                        f"{work_dir}; expected field {cell.field!r}"),
             )
         try:
