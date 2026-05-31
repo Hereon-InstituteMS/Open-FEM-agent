@@ -580,9 +580,11 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     scalar = None
     field_used = None
     if cell.field is not None:
-        # A cell that asked for a scalar but received no VTU/VTK is a
-        # failure of the run even if the backend exited 0 — surface it
-        # instead of quietly returning status=completed with scalar=None.
+        # A cell that asked for a scalar but received no output file
+        # in any of the formats in `_OUTPUT_SUFFIXES` (currently
+        # .vtu / .vtk / .xdmf / .pvd) is a failure of the run even if
+        # the backend exited 0 — surface it instead of quietly
+        # returning status=completed with scalar=None.
         if not output_files:
             return CellResult(
                 cell, status="no_output_file", elapsed_s=elapsed,
