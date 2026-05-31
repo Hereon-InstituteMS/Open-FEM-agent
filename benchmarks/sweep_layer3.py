@@ -521,19 +521,36 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
                           error=(job.error or "")[:300])
 
     # ── extract scalar from the LAST output snapshot (final time step /
-    # converged state).  Accept every format
-    # `core.post_processing.read_mesh()` knows how to load *except*
-    # `.pvtu`:
-    #   .vtu    — modern XML unstructured (FEniCSx, skfem, fourc, ...)
-    #   .vtk    — legacy unstructured (KratosMultiphysics `VtkOutput`)
-    #   .pvd    — ParaView collection / time-series index
-    #   .xdmf   — XDMF (dolfinx alternative)
-    # `.pvtu` (parallel-partitioned VTU wrapper) is intentionally
-    # excluded — it can hang PyVista when the per-rank `.vtu`
-    # partials are accessed (see the matching policy at
-    # src/tools/consolidated.py: "skip .pvtu (parallel wrappers
-    # that can hang PyVista)").  The per-rank `.vtu` partials
-    # themselves are accepted directly.
+    # converged state).  We accept a *subset* of what
+    # `core.post_processing.read_mesh()` knows how to load — the
+    # subset whose reads return a flat `pyvista.DataSet` with a
+    # `.point_data` API.  Concretely:
+    #
+    #   .vtu    accepted — modern XML unstructured (FEniCSx, skfem, fourc, ...)
+    #   .vtk    accepted — legacy unstructured (KratosMultiphysics `VtkOutput`)
+    #   .xdmf   accepted — XDMF (dolfinx alternative)
+    #
+    #   .pvtu   excluded — parallel-partitioned VTU wrapper that can
+    #           hang PyVista when the per-rank `.vtu` partials are
+    #           accessed (matching policy at
+    #           `src/tools/consolidated.py`: "skip .pvtu (parallel
+    #           wrappers that can hang PyVista)").  The per-rank
+    #           `.vtu` partials themselves are accepted via the
+    #           `.vtu` entry above.
+    #
+    #   .pvd    excluded — `pv.read("*.pvd")` returns a `MultiBlock`,
+    #           not a flat `DataSet`.  `post_process_file()` assumes
+    #           the flat shape, so accepting `.pvd` here would turn
+    #           every cell that writes a `.pvd` index into a
+    #           `postproc_failed` even when a perfectly good `.vtu`
+    #           partial sits next to it.  Re-enabling `.pvd` is
+    #           blocked on `core/post_processing.py` learning to
+    #           pick a block / time-step from a MultiBlock.
+    #
+    # Keep `_OUTPUT_SUFFIXES` below as the single source of truth
+    # for what is actually accepted.  This comment block describes
+    # *why* — never re-add a suffix here without verifying that
+    # `post_process_file` can read it as a flat DataSet.
     #
     # Suffix matching is case-insensitive: some backends and
     # filesystems emit upper-case (`.VTU`) and `read_mesh` itself
