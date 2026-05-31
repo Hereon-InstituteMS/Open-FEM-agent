@@ -12,14 +12,14 @@
     ]
   },
   "kratos": {
-    "version": "",
-    "n_applications": 0,
+    "version": "10.4.\"2\"--0-Release-x86_64",
+    "n_applications": 3,
     "n_elements": 0,
     "n_conditions": 0,
-    "n_constitutive_laws": 0,
-    "n_variables": 0,
+    "n_constitutive_laws": 22,
+    "n_variables": 1527,
     "notes": [
-      "KratosMultiphysics not importable: No module named 'KratosMultiphysics'"
+      "package_dir=/home/hermann/Schreibtisch/Open-FEM-agent/.venv/lib/python3.12/site-packages/KratosMultiphysics"
     ]
   }
 }
