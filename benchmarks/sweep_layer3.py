@@ -547,8 +547,11 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     # (`.vtu` > `.vtk` > `.xdmf` > `.pvd`) so two formats emitted
     # for the same step never pick a less-supported container.
     import re as _re
-    _OUTPUT_SUFFIXES = (".vtu", ".vtk", ".pvd", ".xdmf")
-    _SUFFIX_PRIORITY = {".vtu": 0, ".vtk": 1, ".xdmf": 2, ".pvd": 3}
+    # Listed in preference order so the error message text and the
+    # `_SUFFIX_PRIORITY` tiebreaker share a single, internally-
+    # consistent ordering: `.vtu` > `.vtk` > `.xdmf` > `.pvd`.
+    _OUTPUT_SUFFIXES = (".vtu", ".vtk", ".xdmf", ".pvd")
+    _SUFFIX_PRIORITY = {suf: i for i, suf in enumerate(_OUTPUT_SUFFIXES)}
 
     def _step_key(p):
         # Use the *full tuple* of integer groups in the stem, not just
