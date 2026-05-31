@@ -551,9 +551,18 @@ async def run_cell(cell: Cell, work_dir: Path) -> CellResult:
     _SUFFIX_PRIORITY = {".vtu": 0, ".vtk": 1, ".xdmf": 2, ".pvd": 3}
 
     def _step_key(p):
-        m = _re.findall(r"\d+", p.stem)
+        # Use the *full tuple* of integer groups in the stem, not just
+        # the last one.  Per-rank output files use a `<name>-<step>-<rank>`
+        # naming convention (e.g. 4C writes `structure-00001-0.vtu` and
+        # Kratos writes `Structure_0_5.vtk` for rank 0 / step 5).  If we
+        # only looked at the last integer we would treat the rank as the
+        # step on 4C (selecting the wrong "final" snapshot when steps
+        # exceed nine and rank stays zero).  An int-tuple key sorts
+        # naturally across both layouts: (step=10, rank=0) > (step=9,
+        # rank=0), and (rank=0, step=10) > (rank=0, step=5).
+        ints = tuple(int(x) for x in _re.findall(r"\d+", p.stem))
         return (
-            int(m[-1]) if m else 0,
+            ints,
             # Negate so higher-priority sorts AFTER lower-priority on
             # the same step (sorted() ascending → key[-1] is "last").
             -_SUFFIX_PRIORITY.get(p.suffix.lower(), 99),
